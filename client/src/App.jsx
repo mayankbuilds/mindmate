@@ -27,7 +27,14 @@ const levelOf = (s) => (s < 35 ? "Low" : s < 65 ? "Moderate" : "High");
 const LEVEL_COLOR = { Low: "#3F9E84", Moderate: "#5B6FE8", High: "#D9737D" };
 const LEVEL_SOFT = { Low: "#E2F5EE", Moderate: "#E8EDFF", High: "#FDEBEC" };
 
-function computeStress({ sleep, study, screen, exam, mood, note }) {
+function computeStress(item = {}) {
+  const sleep = Number(item.sleep ?? 7);
+  const study = Number(item.study ?? 5);
+  const screen = Number(item.screen ?? 5);
+  const exam = Number(item.exam ?? 14);
+  const mood = item.mood || 'okay';
+  const note = item.note || '';
+
   const m = MOODS.find((x) => x.id === mood);
   const sleepP = Math.max(0, 8 - sleep) * 8 + (sleep > 10 ? 4 : 0);
   const studyP = Math.max(0, study - 4) * 3;
@@ -53,9 +60,12 @@ const RECS = [
   { id: "focus", icon: BookOpen, title: "Try a focused study session", blurb: "25 minutes on one topic, then a real break. Small blocks beat marathons.", mins: 25, secs: 1500, tint: "green" },
 ];
 
-function recsFor(t) {
-  const w = { breath: 2, walk: 1, screen: t.screen > 5 ? 4 : 0, sleep: t.sleep < 7 ? 4 : 0, focus: t.study > 7 ? 0 : 1 };
-  return [...RECS].sort((a, b) => w[b.id] - w[a.id]);
+function recsFor(t = {}) {
+  const scr = Number(t?.screen ?? 5);
+  const slp = Number(t?.sleep ?? 7);
+  const std = Number(t?.study ?? 5);
+  const w = { breath: 2, walk: 1, screen: scr > 5 ? 4 : 0, sleep: slp < 7 ? 4 : 0, focus: std > 7 ? 0 : 1 };
+  return [...RECS].sort((a, b) => (w[b.id] || 0) - (w[a.id] || 0));
 }
 
 const SYSTEM_PROMPT = `You are MindMate AI, a warm, supportive wellness companion for university students. Talk like a kind, thoughtful friend: short replies (2-4 sentences), natural language, no bullet lists unless giving a breathing exercise. Validate feelings first, then offer one gentle, practical idea. Ask at most one question. You are not a therapist: never diagnose. If a student mentions self-harm, hopelessness, or being in danger, respond with care, encourage them to reach out to a trusted person or local emergency services right now, and mention the SOS button in the app.`;
@@ -635,10 +645,9 @@ function Slider({ label, unit, value, min, max, step, onChange }) {
 }
 
 function Wellness({ today, setToday, wtab, setWtab, openSession, setTab, resultShown, setResultShown }) {
-  const [d, setD] = useState({ sleep: today.sleep, study: today.study, screen: today.screen, exam: today.exam, mood: today.mood, note: "" });
+  const [d, setD] = useState({ sleep: today?.sleep ?? 7.0, study: today?.study ?? 5.0, screen: today?.screen ?? 5.0, exam: today?.exam ?? 14, mood: today?.mood || "okay", note: today?.note || "" });
   const set = (k) => (v) => setD((p) => ({ ...p, [k]: v }));
   const score = computeStress(d);
-  c
   const analyze = async () => {
   try {
     const saved = await api.checkin(d);
@@ -756,21 +765,10 @@ function Chat({ ctx }) {
   const box = useRef(null);
   
   useEffect(() => {
-  const token = localStorage.getItem("mm_token");
-  if (!token) return;
-
-  Promise.all([api.getProfile(), api.getToday(), api.getContacts()])
-    .then(([userData, todayData, contactList]) => {
-      setUser(userData);
-      if (todayData) setToday({ ...todayData, done: true });
-      if (contactList) setContacts(contactList);
-      setScreen("app");
-    })
-    .catch(() => {
-      localStorage.removeItem("mm_token");
-      setScreen("landing");
-    });
-}, []);
+    if (box.current) {
+      box.current.scrollTop = box.current.scrollHeight;
+    }
+  }, [msgs, busy]);
 
   const send = async (raw) => {
   const t = (raw ?? text).trim();
@@ -1118,6 +1116,29 @@ export default function MindMate() {
     return () => clearTimeout(t);
   }, [toastMsg]);
   useEffect(() => { window.scrollTo(0, 0); }, [tab, screen, wtab]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("mm_token");
+    if (!token) return;
+
+    Promise.all([api.getProfile(), api.getToday(), api.getContacts()])
+      .then(([userData, todayData, contactList]) => {
+        if (userData && userData.name) {
+          setUser(userData);
+          if (typeof userData.autoNotify === "boolean") setAutoNotify(userData.autoNotify);
+        }
+        if (todayData && todayData.date) {
+          setToday({ ...todayData, done: true });
+        }
+        if (contactList && Array.isArray(contactList) && contactList.length > 0) {
+          setContacts(contactList);
+        }
+        setScreen("app");
+      })
+      .catch((err) => {
+        console.warn("Session verification:", err);
+      });
+  }, []);
 
   const go = (s) => setScreen(s);
   const enter = (u) => { setUser((p) => ({ ...p, ...u })); setScreen("app"); setTab("dashboard"); };
