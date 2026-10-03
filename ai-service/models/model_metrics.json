@@ -1,0 +1,32 @@
+{
+  "model_name": "RandomForest_MultiTier_Student_Stress_Predictor",
+  "dataset_samples": 16384,
+  "features": [
+    "Nervousness",
+    "Unable to control",
+    "Worry",
+    "Trouble in Relaxation",
+    "Restlessness",
+    "Irritability",
+    "Fear"
+  ],
+  "classes": [
+    "No Stress",
+    "Mild Stress",
+    "Moderate Stress",
+    "Severe Stress"
+  ],
+  "accuracy": 0.852,
+  "precision": 0.8674,
+  "recall": 0.852,
+  "f1_score": 0.8572,
+  "feature_importances": {
+    "Nervousness": 0.1437,
+    "Unable to control": 0.1428,
+    "Worry": 0.1381,
+    "Trouble in Relaxation": 0.1341,
+    "Restlessness": 0.1459,
+    "Irritability": 0.1411,
+    "Fear": 0.1543
+  }
+}

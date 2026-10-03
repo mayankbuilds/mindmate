@@ -1,0 +1,69 @@
+mindmate/
+│
+├── client/                               # Frontend (tumhara existing code)
+│   ├── public/
+│   ├── src/
+│   │   ├── assets/
+│   │   ├── components/                   # Sub-components agar split karne ho
+│   │   ├── services/
+│   │   │   └── api.js                    # Axios instance + API call methods
+│   │   ├── App.jsx                       # MindMate master component
+│   │   ├── main.jsx
+│   │   └── index.css
+│   ├── .env.example                      # VITE_API_BASE_URL
+│   ├── package.json
+│   └── vite.config.js
+│
+├── server/                               # Node.js + Express Backend
+│   ├── src/
+│   │   ├── config/
+│   │   │   ├── db.js                     # MongoDB Mongoose connection
+│   │   │   └── mailer.js                 # Nodemailer transporter configuration
+│   │   ├── controllers/
+│   │   │   ├── authController.js         # Signup, Login, Profile
+│   │   │   ├── wellnessController.js     # Check-in, 7-day History
+│   │   │   ├── contactController.js      # Emergency Contacts CRUD & SOS Alert
+│   │   │   └── chatController.js         # Chat proxy to FastAPI
+│   │   ├── middleware/
+│   │   │   ├── authMiddleware.js         # JWT verify middleware
+│   │   │   └── errorMiddleware.js        # Global error handler
+│   │   ├── models/
+│   │   │   ├── User.js                   # User Schema & Password hashing
+│   │   │   ├── CheckIn.js                # Daily Wellness logs
+│   │   │   └── Contact.js                # Emergency Contacts Schema
+│   │   ├── routes/
+│   │   │   ├── authRoutes.js
+│   │   │   ├── wellnessRoutes.js
+│   │   │   ├── contactRoutes.js
+│   │   │   └── chatRoutes.js
+│   │   ├── services/
+│   │   │   ├── aiService.js              # HTTP calls to FastAPI engine
+│   │   │   └── alertService.js           # Consecutive high-stress check & email dispatcher
+│   │   └── app.js                        # Express app & route mounting
+│   ├── .env.example
+│   ├── Dockerfile
+│   ├── package.json
+│   └── server.js                         # Entry point (port listen)
+│
+├── ai-service/                           # FastAPI AI Engine (Groq / Ollama + Qwen)
+│   ├── app/
+│   │   ├── core/
+│   │   │   ├── config.py                 # Pydantic BaseSettings (.env loading)
+│   │   │   └── llm.py                    # Provider-agnostic OpenAI client (Groq / Ollama)
+│   │   ├── schemas/
+│   │   │   ├── wellness.py               # Request/Response schemas for stress compute
+│   │   │   └── chat.py                   # Request/Response schemas for companion chat
+│   │   ├── services/
+│   │   │   ├── stress_engine.py          # Stress score & exercise recommendations logic
+│   │   │   └── companion_engine.py       # Prompt building, safety triage & LLM completions
+│   │   ├── routes/
+│   │   │   ├── wellness.py               # /compute-stress endpoint
+│   │   │   └── chat.py                   # /chat endpoint
+│   │   └── main.py                       # FastAPI initialization & CORS
+│   ├── .env.example
+│   ├── Dockerfile
+│   └── requirements.txt
+│
+├── docker-compose.yml                    # Client ke liye 1-command startup
+├── .gitignore
+└── README.md                             # Client setup, env vars & run guide
