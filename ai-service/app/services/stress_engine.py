@@ -106,7 +106,9 @@ def compute_stress_score(
     return score
 
 
-def get_recommendations(sleep: float, study: float, screen: float) -> List[Dict[str, Any]]:
+def get_recommendations(
+    sleep: float, study: float, screen: float
+) -> List[Dict[str, Any]]:
     weights = {
         "breath": 2,
         "walk": 1,

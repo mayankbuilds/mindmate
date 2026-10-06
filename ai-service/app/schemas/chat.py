@@ -8,11 +8,12 @@ class ChatMessage(BaseModel):
 
 
 class StudentContext(BaseModel):
-    level: str
-    sleep: float
-    study: float
-    screen: float
-    exam: int
+    level: Optional[str] = "Moderate"
+    score: Optional[float] = None
+    sleep: Optional[float] = None
+    study: Optional[float] = None
+    screen: Optional[float] = None
+    exam: Optional[int] = None
 
 
 class ChatRequest(BaseModel):

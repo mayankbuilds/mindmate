@@ -4,9 +4,10 @@ from typing import List
 
 class Settings(BaseSettings):
     PORT: int = 8000
+    GEMINI_API_KEY: str = ""
     AI_PROVIDER: str = "groq"
     AI_BASE_URL: str = "https://api.groq.com/openai/v1"
-    AI_API_KEY: str = "mock-key"
+    AI_API_KEY: str = ""
     AI_MODEL: str = "qwen-2.5-32b"
     ALLOWED_ORIGINS: str = "http://localhost:5000,http://127.0.0.1:5000"
 

@@ -1,26 +1,57 @@
 # Node dependencies
 **/node_modules/
-package-lock.json
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+pnpm-debug.log*
 
-# Python environments & cache
+# Production builds & output
+**/dist/
+**/build/
+.next/
+out/
+
+# Vite / Frontend cache
+**/.vite/
+
+# Python virtual environments & cache
 **/.venv/
 **/venv/
+**/env/
 **/__pycache__/
 *.pyc
 *.pyo
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+*.egg-info/
 
-# Builds & output
-**/dist/
-**/build/
-
-# Environment files
+# Environment files & secrets (Always keep local and never commit secrets)
+.env
+.env.*
+!.env.example
+!.env.*.example
 **/.env
+**/.env.*
 !**/.env.example
+!**/.env.*.example
 
-# OS / IDE
+# Logs
+logs/
+*.log
+
+# OS & Editor temporary files
 .DS_Store
+Thumbs.db
 .vscode/
 .idea/
+*.swp
+*.swo
+
+# Dependency lock files
+# Note: For production hosting (Render, Vercel, Railway), package-lock.json
+# is recommended to be committed so the cloud platform can run "npm ci"
+# for deterministic, reproducible installs. Uncomment below only if you
+# explicitly wish to omit lock files from your repository:
+# package-lock.json

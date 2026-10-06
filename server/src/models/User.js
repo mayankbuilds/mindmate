@@ -7,6 +7,7 @@ const userSchema = new mongoose.Schema(
     email: { type: String, required: true, unique: true, lowercase: true, trim: true },
     password: { type: String, required: true, minlength: 8 },
     college: { type: String, default: "Northfield University" },
+    avatar: { type: String, default: "" },
     preferences: {
       daily: { type: Boolean, default: true },
       tips: { type: Boolean, default: true },

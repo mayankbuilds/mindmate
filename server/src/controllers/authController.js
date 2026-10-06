@@ -7,23 +7,33 @@ const generateToken = (id) => {
   });
 };
 
+const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
 const registerUser = async (req, res) => {
   const { name, email, password } = req.body;
   if (!name || !email || !password) {
     return res.status(400).json({ message: "Please provide all required fields" });
   }
 
-  const userExists = await User.findOne({ email });
+  const cleanName = name.trim();
+  const cleanEmail = email.replace(/\s+/g, "").toLowerCase();
+
+  if (!emailRegex.test(cleanEmail)) {
+    return res.status(400).json({ message: "Invalid email address format" });
+  }
+
+  const userExists = await User.findOne({ email: cleanEmail });
   if (userExists) {
     return res.status(400).json({ message: "User already exists with this email" });
   }
 
-  const user = await User.create({ name, email, password });
+  const user = await User.create({ name: cleanName, email: cleanEmail, password });
   res.status(201).json({
     _id: user._id,
     name: user.name,
     email: user.email,
     college: user.college,
+    avatar: user.avatar || "",
     preferences: user.preferences,
     autoNotify: user.autoNotify,
     token: generateToken(user._id),
@@ -32,7 +42,8 @@ const registerUser = async (req, res) => {
 
 const loginUser = async (req, res) => {
   const { email, password } = req.body;
-  const user = await User.findOne({ email });
+  const cleanEmail = (email || "").replace(/\s+/g, "").toLowerCase();
+  const user = await User.findOne({ email: cleanEmail });
 
   if (user && (await user.matchPassword(password))) {
     res.json({
@@ -40,6 +51,7 @@ const loginUser = async (req, res) => {
       name: user.name,
       email: user.email,
       college: user.college,
+      avatar: user.avatar || "",
       preferences: user.preferences,
       autoNotify: user.autoNotify,
       token: generateToken(user._id),
@@ -57,9 +69,22 @@ const updateProfile = async (req, res) => {
   const user = await User.findById(req.user._id);
   if (!user) return res.status(404).json({ message: "User not found" });
 
-  user.name = req.body.name || user.name;
-  user.email = req.body.email || user.email;
-  user.college = req.body.college || user.college;
+  if (req.body.name) user.name = req.body.name.trim();
+  if (req.body.email) {
+    const cleanEmail = req.body.email.replace(/\s+/g, "").toLowerCase();
+    if (!emailRegex.test(cleanEmail)) {
+      return res.status(400).json({ message: "Invalid email address format" });
+    }
+    if (cleanEmail !== user.email) {
+      const existing = await User.findOne({ email: cleanEmail });
+      if (existing) {
+        return res.status(400).json({ message: "Email is already in use by another account" });
+      }
+    }
+    user.email = cleanEmail;
+  }
+  if (req.body.college) user.college = req.body.college.trim();
+  if (req.body.avatar !== undefined) user.avatar = req.body.avatar;
   if (req.body.preferences) user.preferences = { ...user.preferences, ...req.body.preferences };
   if (typeof req.body.autoNotify === "boolean") user.autoNotify = req.body.autoNotify;
 
@@ -69,6 +94,7 @@ const updateProfile = async (req, res) => {
     name: updatedUser.name,
     email: updatedUser.email,
     college: updatedUser.college,
+    avatar: updatedUser.avatar || "",
     preferences: updatedUser.preferences,
     autoNotify: updatedUser.autoNotify,
   });

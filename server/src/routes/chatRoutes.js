@@ -1,8 +1,10 @@
 const express = require("express");
 const router = express.Router();
 const { postChatMessage } = require("../controllers/chatController");
-const { protect } = require("../middleware/authMiddleware");
+const { optionalAuth } = require("../middleware/authMiddleware");
 
-router.post("/message", protect, postChatMessage);
+// Both /api/chat and /api/chat/message point to postChatMessage with optional authentication
+router.post("/", optionalAuth, postChatMessage);
+router.post("/message", optionalAuth, postChatMessage);
 
 module.exports = router;
