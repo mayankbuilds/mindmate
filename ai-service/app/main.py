@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.routes import wellness, chat, assessment
+from app.services.assessment_engine import is_model_ready
 
 app = FastAPI(
     title="MindMate AI Service",
@@ -24,8 +25,10 @@ app.include_router(assessment.router)
 
 @app.get("/health")
 def health_check():
+    ready = is_model_ready()
     return {
-        "status": "healthy",
+        "status": "healthy" if ready else "degraded",
         "provider": settings.AI_PROVIDER,
         "model": settings.AI_MODEL,
+        "ml_inference_ready": ready,
     }
