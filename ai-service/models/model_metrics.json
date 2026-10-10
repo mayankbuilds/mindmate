@@ -1,6 +1,9 @@
 {
   "model_name": "RandomForest_MultiTier_Student_Stress_Predictor",
+  "pipeline_artifact": "student_stress_pipeline.joblib",
   "dataset_samples": 16384,
+  "train_samples": 13107,
+  "test_samples": 3277,
   "features": [
     "Nervousness",
     "Unable to control",
@@ -11,15 +14,61 @@
     "Fear"
   ],
   "classes": [
-    "No Stress",
-    "Mild Stress",
-    "Moderate Stress",
-    "Severe Stress"
+    "No",
+    "Mild",
+    "Moderate",
+    "Severe"
   ],
-  "accuracy": 0.852,
-  "precision": 0.8674,
-  "recall": 0.852,
-  "f1_score": 0.8572,
+  "encoding": {
+    "No": 0,
+    "Mild": 1,
+    "Moderate": 2,
+    "Severe": 3
+  },
+  "evaluation_split": "80/20 stratified holdout (StandardScaler fitted strictly on training data)",
+  "accuracy": 0.8511,
+  "precision_weighted": 0.8667,
+  "recall_weighted": 0.8511,
+  "f1_weighted": 0.8563,
+  "classification_report": {
+    "No": {
+      "precision": 0.45714285714285713,
+      "recall": 0.7384615384615385,
+      "f1-score": 0.5647058823529412,
+      "support": 65.0
+    },
+    "Mild": {
+      "precision": 0.8998060762766645,
+      "recall": 0.8843710292249047,
+      "f1-score": 0.8920217878884973,
+      "support": 1574.0
+    },
+    "Moderate": {
+      "precision": 0.886575735821967,
+      "recall": 0.8283031522468142,
+      "f1-score": 0.8564493758668515,
+      "support": 1491.0
+    },
+    "Severe": {
+      "precision": 0.49137931034482757,
+      "recall": 0.7755102040816326,
+      "f1-score": 0.6015831134564644,
+      "support": 147.0
+    },
+    "accuracy": 0.8510833079035703,
+    "macro avg": {
+      "precision": 0.683725994896579,
+      "recall": 0.8066614810037225,
+      "f1-score": 0.7286900398911886,
+      "support": 3277.0
+    },
+    "weighted avg": {
+      "precision": 0.8666848429981685,
+      "recall": 0.8510833079035703,
+      "f1-score": 0.8563158112862411,
+      "support": 3277.0
+    }
+  },
   "feature_importances": {
     "Nervousness": 0.1437,
     "Unable to control": 0.1428,
@@ -28,5 +77,7 @@
     "Restlessness": 0.1459,
     "Irritability": 0.1411,
     "Fear": 0.1543
-  }
+  },
+  "dataset_provenance": "Synthetic full-factorial grid (4^7 = 16,384 combinations)",
+  "disclaimer": "Metrics evaluate the Random Forest's ability to approximate the dataset threshold cutoffs on holdout combinations. They do not demonstrate real-world clinical or psychiatric diagnostic validity."
 }

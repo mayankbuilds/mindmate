@@ -1,12 +1,12 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.routes import wellness, chat
+from app.routes import wellness, chat, assessment
 
 app = FastAPI(
     title="MindMate AI Service",
     version="1.0.0",
-    description="Microservice for stress calculation, recommendations and Qwen AI Companion",
+    description="Microservice for stress calculation, recommendations, ML assessment and AI Companion",
 )
 
 app.add_middleware(
@@ -19,6 +19,7 @@ app.add_middleware(
 
 app.include_router(wellness.router)
 app.include_router(chat.router)
+app.include_router(assessment.router)
 
 
 @app.get("/health")

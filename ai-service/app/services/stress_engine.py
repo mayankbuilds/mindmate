@@ -68,6 +68,13 @@ def compute_stress_score(
     mood: str = "okay",
     note: str = "",
 ) -> int:
+    """
+    Deterministic Lifestyle Habit Index (Flow B).
+    Computes a transparent behavioral lifestyle balance score based on sleep debt,
+    study load, screen exposure, exam proximity, and self-reported mood.
+    NOTE: This is a rule-based habit tracking heuristic, NOT a machine-learning prediction.
+    For the ML assessment, see app.services.assessment_engine.
+    """
     sleep_p = max(0.0, 8.0 - sleep) * 8.0 + (4.0 if sleep > 10.0 else 0.0)
     study_p = max(0.0, study - 4.0) * 3.0
     screen_p = max(0.0, screen - 3.0) * 4.0
