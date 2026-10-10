@@ -51,10 +51,10 @@ const QUESTIONNAIRE_ITEMS = [
 ];
 
 const RATING_OPTIONS = [
-  { val: 0, label: "No (0)", desc: "Not at all" },
-  { val: 1, label: "Mild (1)", desc: "Several days" },
-  { val: 2, label: "Moderate (2)", desc: "More than half the days" },
-  { val: 3, label: "Severe (3)", desc: "Nearly every day" },
+  { val: 0, label: "No (0)", desc: "None reported" },
+  { val: 1, label: "Mild (1)", desc: "Mild level" },
+  { val: 2, label: "Moderate (2)", desc: "Moderate level" },
+  { val: 3, label: "Severe (3)", desc: "Severe level" },
 ];
 
 const CLASS_PALETTE = {
