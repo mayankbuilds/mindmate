@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
 from app.routes import wellness, chat, assessment
+from app.core.llm import check_llm_health
 from app.services.assessment_engine import is_model_ready
 
 app = FastAPI(
@@ -26,9 +27,14 @@ app.include_router(assessment.router)
 @app.get("/health")
 def health_check():
     ready = is_model_ready()
+    llm_info = check_llm_health()
     return {
         "status": "healthy" if ready else "degraded",
-        "provider": settings.AI_PROVIDER,
-        "model": settings.AI_MODEL,
+        "provider": llm_info["configured_provider"],
+        "model": llm_info["configured_model"],
+        "active_provider": llm_info["active_provider"],
+        "active_model": llm_info["active_model"],
+        "llm_ready": llm_info["llm_ready"],
+        "llm_status": llm_info["llm_status"],
         "ml_inference_ready": ready,
     }

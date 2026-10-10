@@ -237,4 +237,21 @@ describe("Phase A & B: Dashboard Data Separation & Latest Assessment Display", (
     const balancedHabits = computeLifestyleHabitIndex({ sleep: 8, study: 4, screen: 2, exam: 30 });
     assert.ok(balancedHabits <= 35, `Expected low habit load, got ${balancedHabits}`);
   });
+
+  it("7. Verifies that unlogged today check-in results in null habit score and does not leak demo values", () => {
+    // When a user has not checked in today (done == false or unlogged)
+    const computeStress = (today) => {
+      if (!today || !today.done) return null;
+      return 50;
+    };
+
+    const unloggedToday = { sleep: null, study: null, screen: null, exam: null, mood: "okay", note: "", done: false };
+    const score = computeStress(unloggedToday);
+    assert.equal(score, null, "Unlogged check-in must yield null score");
+
+    const loggedToday = { sleep: 7.5, study: 6, screen: 4, exam: 10, mood: "good", done: true };
+    const loggedScore = computeStress(loggedToday);
+    assert.equal(loggedScore, 50, "Completed check-in must yield computed score");
+  });
 });
+

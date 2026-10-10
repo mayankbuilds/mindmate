@@ -17,18 +17,13 @@ Your Core Responsibilities:
    - Never diagnose, prescribe medications, or claim clinical certainty.
    - If the user expresses thoughts of self-harm, severe crisis, or hopelessness, immediately stop conversational banter, express warm concern, and provide verified crisis hotline information (e.g., Tele-MANAS: 14416 / 1800-891-4416 or KIRAN: 1800-599-0019 in India, or 988 in the US/Global emergency lines).`;
 
-const getFallbackReply = (userMessage = "", stressLevel = "Moderate") => {
-  const t = (userMessage || "").toLowerCase();
+const matchesAny = (patterns, text) => patterns.some((p) => p.test(text));
 
-  // Safety crisis boundary check
-  if (
-    t.includes("kill myself") ||
-    t.includes("suicide") ||
-    t.includes("end my life") ||
-    t.includes("harm myself") ||
-    t.includes("want to die") ||
-    t.includes("hopeless")
-  ) {
+const getFallbackReply = (userMessage = "", stressLevel = "Moderate", context = {}) => {
+  const t = (userMessage || "").trim();
+
+  // 1. Safety crisis boundary check
+  if (matchesAny([/kill\s+myself/i, /suicide/i, /end\s+my\s+life/i, /harm\s+myself/i, /want\s+to\s+die/i, /\bhopeless\b/i], t)) {
     return (
       "I hear how much pain you are carrying right now, but please know you do not have to carry it alone. " +
       "Please connect with caring, professional support right now:\n\n" +
@@ -38,31 +33,99 @@ const getFallbackReply = (userMessage = "", stressLevel = "Moderate") => {
     );
   }
 
-  if (t.includes("breath")) {
+  // 2. Academic Pressures, Exams & Deadlines
+  if (matchesAny([/\b(study\w*|exam\w*|test\w*|assignment\w*|deadline\w*|homework|procrastinat\w*|grades?|quiz\w*)\b/i], t)) {
+    const examNote = context && context.exam != null ? ` (your exam is in ${context.exam} days)` : "";
     return (
-      "Let's take a slow breath together. Breathe in through your nose for 4 counts, hold gently for 4, " +
-      "then exhale smoothly for 6. Let your shoulders drop as you release. How does your chest feel right now?"
+      `Academic pressure can feel intense${examNote}. The secret to getting through is chunking: ` +
+      "pick just ONE small, 20-minute focus block, and give yourself full permission to ignore the rest for now. " +
+      "What is the single most urgent task on your plate today?"
     );
   }
 
-  if (t.includes("sleep")) {
+  // 3. Sleep & Nighttime Rest
+  if (matchesAny([/\b(sleep\w*|insomnia|can't\s+sleep|awake|nightmare\w*|bedtime|restless\w*)\b/i], t)) {
     return (
-      "When sleep is disrupted, everything feels heavier. Tonight, try putting your phone across the room 30 minutes " +
-      "before bed and take 5 slow breaths in the dark. Are you having trouble falling asleep or waking up early?"
+      "When sleep is disrupted, everything feels heavier the next day. Tonight, try setting your phone " +
+      "across the room 30 minutes before bed and taking five slow breaths in the dark. " +
+      "Are you having trouble falling asleep, or waking up in the middle of the night?"
     );
   }
 
-  if (t.includes("study") || t.includes("overwhelm") || t.includes("exam")) {
+  // 4. Breathing & Immediate Relaxation
+  if (matchesAny([/\b(breath|breathe|breathing|relax|chill|unwind|meditat\w*)\b/i, /\bcalm\b/i], t)) {
     return (
-      "That is a lot to carry at once. Let's break it down: choose just one small 20-minute task to focus on, " +
-      "and give yourself permission to ignore the rest for now. What is the single most urgent topic on your plate today?"
+      "Let's take a slow reset breath together right now:\n\n" +
+      "1. Breathe in gently through your nose for 4 counts...\n" +
+      "2. Hold softly for 4 counts...\n" +
+      "3. Exhale slowly and completely through your mouth for 6 counts.\n\n" +
+      "Let your shoulders drop as you release. How does your chest feel right now?"
     );
   }
 
-  if (t.includes("stress") || t.includes("anxious") || t.includes("panic")) {
+  // 5. Anxiety, Panic & Overwhelm
+  if (matchesAny([/\b(stress\w*|anxious\w*|anxiety|panic|overwhelm\w*|nervous\w*|worry\w*|racing|scared|fear)\b/i], t)) {
     return (
-      `I hear you, and it is completely understandable to feel that way with your stress level being ${stressLevel.toLowerCase()}. ` +
-      "Would you like to try a gentle 2-minute breathing exercise, or talk through what is making you feel this way?"
+      `I hear you, and those feelings are completely understandable with your stress level being ${stressLevel.toLowerCase()}. ` +
+      "Let's ground right now using the 3-3-3 check: name 3 things you can see around you, " +
+      "3 sounds you can hear, and move 3 parts of your body (like your fingers, toes, and shoulders). " +
+      "What is one object you see right now?"
+    );
+  }
+
+  // 6. Fatigue, Exhaustion & Burnout
+  if (matchesAny([/\b(tired|exhaust\w*|burnout|burnt\s+out|drained|sleepy|fatigue)\b/i, /no\s+energy/i], t)) {
+    const sleepNote = context && context.sleep != null ? ` (you logged ${context.sleep}h of sleep)` : "";
+    return (
+      `It sounds like your mind and body are asking for genuine rest${sleepNote}. ` +
+      "When we run on empty, everyday tasks become much heavier. Can you step away from screens " +
+      "and take a 10-minute quiet pause right now? What is the single most restful thing you could do today?"
+    );
+  }
+
+  // 7. Sadness, Loneliness & Low Mood
+  if (matchesAny([/\b(sad\w*|unhappy|cry|crying|lonely|alone|depress\w*|blue|heartbroken)\b/i], t)) {
+    return (
+      "I'm really sorry things feel heavy and lonely right now. It is completely okay to feel sad, " +
+      "and you don't have to force yourself to feel positive right away. Would you like to talk about " +
+      "what brought this on, or would you prefer a gentle breathing pause together?"
+    );
+  }
+
+  // 8. Gratitude & Politeness
+  if (matchesAny([/\b(thank\w*|appreciat\w*|helpful|cheers)\b/i, /good\s+to\s+know/i], t)) {
+    return (
+      "You are very welcome. Remember to give yourself credit for checking in on your well-being today. " +
+      "I'm always right here whenever you need a quick breather or someone to talk through your day with."
+    );
+  }
+
+  // 9. Greetings & Salutations
+  if (matchesAny([/\b(hello|hi|hey|howdy|sup)\b/i, /good\s+morning/i, /good\s+evening/i, /good\s+afternoon/i], t)) {
+    let greeting = "Hello! I'm here and glad you reached out. ";
+    if (context && context.exam != null && Number(context.exam) <= 7) {
+      greeting += `I see your exam is coming up in ${context.exam} days. `;
+    }
+    return (
+      greeting +
+      "How has your day been going so far? Tell me what's on your mind, and we can take it one calm step at a time."
+    );
+  }
+
+  // 10. General Guidance & Advice
+  if (matchesAny([/\b(advice|tips?|guide\w*)\b/i, /what\s+should\s+i\s+do/i, /what\s+to\s+do/i, /\bhelp\b/i], t)) {
+    return (
+      "Here is a great student wellness starting point: drink a tall glass of water, stand up to stretch " +
+      "your back, and give yourself a 5-minute break from coursework. What area feels like it needs the most " +
+      "attention today: your sleep, study routine, or taking time to unwind?"
+    );
+  }
+
+  // 11. Contextual Fall-through
+  if (context && context.sleep != null && Number(context.sleep) < 6) {
+    return (
+      `Thank you for sharing that with me. I noticed you logged ${context.sleep} hours of sleep today. ` +
+      "Short sleep can amplify everything we feel. How are your energy levels holding up right now?"
     );
   }
 
@@ -226,48 +289,11 @@ const computeStressWithAI = async (data) => {
   return computeLocalLifestyleIndex(data);
 };
 
-const callGeminiDirectly = async (messages, context = {}) => {
-  const geminiKey = process.env.GEMINI_API_KEY;
-  if (!geminiKey || geminiKey.trim().length < 8 || geminiKey.startsWith("your_")) {
-    return null;
-  }
-
-  const stressLevel = context.level || "Moderate";
-  const stressScore = context.score != null ? `${context.score}/100` : "Not assessed yet";
-  const systemContent = CALMFLOW_SYSTEM_PROMPT.replace("{{STRESS_LEVEL}}", stressLevel).replace(
-    "{{STRESS_SCORE}}",
-    stressScore
-  );
-
-  const formattedMessages = [{ role: "system", content: systemContent }, ...messages];
-
-  const response = await axios.post(
-    "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
-    {
-      model: "gemini-1.5-flash",
-      messages: formattedMessages,
-      max_tokens: 250,
-      temperature: 0.7,
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${geminiKey.trim()}`,
-        "Content-Type": "application/json",
-      },
-      timeout: 10000,
-    }
-  );
-
-  const reply = response.data?.choices?.[0]?.message?.content;
-  if (!reply) throw new Error("Empty response from Gemini API");
-  return reply.trim();
-};
-
 const sendChatMessageToAI = async (messages, context = {}) => {
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user")?.content || "";
   const stressLevel = context.level || "Moderate";
 
-  // Tier 1: Try FastAPI AI service (which may have Groq/Qwen or Gemini configured)
+  // Tier 1: Forward chat request to FastAPI AI service (where Google Gemini is primary)
   try {
     const response = await axios.post(
       `${getFastApiUrl()}/chat/message`,
@@ -275,26 +301,24 @@ const sendChatMessageToAI = async (messages, context = {}) => {
       { timeout: 7000 }
     );
     if (response.data && response.data.reply) {
-      return { reply: response.data.reply, source: "fastapi" };
+      return {
+        reply: response.data.reply,
+        source: response.data.source || "fastapi",
+        is_fallback: Boolean(response.data.is_fallback),
+        provider: response.data.provider || "fastapi",
+      };
     }
   } catch (_) {
-    // FastAPI offline or failed -> Proceed to Tier 2
+    // FastAPI offline or timed out -> Proceed to transparent offline fallback
   }
 
-  // Tier 2: Try Gemini directly from Node backend using GEMINI_API_KEY
-  try {
-    const geminiReply = await callGeminiDirectly(messages, context);
-    if (geminiReply) {
-      return { reply: geminiReply, source: "gemini" };
-    }
-  } catch (_) {
-    // Gemini direct call failed or quota exceeded -> Proceed to Tier 3
-  }
-
-  // Tier 3: Seamless predefined rule-based CalmFlow fallback
+  // Tier 2: Seamless predefined rule-based Offline Support Guide fallback
+  const rawFallback = getFallbackReply(lastUserMsg, stressLevel, context);
   return {
-    reply: getFallbackReply(lastUserMsg, stressLevel),
+    reply: `[Offline Support Guide]\n\n${rawFallback}`,
     source: "fallback",
+    is_fallback: true,
+    provider: "offline-guide",
   };
 };
 

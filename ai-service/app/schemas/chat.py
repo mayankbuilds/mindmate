@@ -23,3 +23,6 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     reply: str
+    source: str = "llm"
+    is_fallback: bool = False
+    provider: Optional[str] = None

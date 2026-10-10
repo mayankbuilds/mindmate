@@ -27,9 +27,12 @@ const postChatMessage = async (req, res) => {
     // Unconditional safeguard: never throw unhandled 500 error to user
     const lastUserMsg = req.body?.message || "hello";
     const level = req.body?.context?.level || "Moderate";
+    const rawFallback = getFallbackReply(lastUserMsg, level, req.body?.context || {});
     return res.json({
-      reply: getFallbackReply(lastUserMsg, level),
+      reply: `[Offline Support Guide]\n\n${rawFallback}`,
       source: "error-fallback",
+      is_fallback: true,
+      provider: "offline-guide",
     });
   }
 };

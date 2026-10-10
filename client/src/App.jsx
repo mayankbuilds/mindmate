@@ -88,41 +88,19 @@ function recsFor(t = {}) {
 
 const SYSTEM_PROMPT = `You are MindMate AI, a warm, supportive wellness companion for university students. Talk like a kind, thoughtful friend: short replies (2-4 sentences), natural language, no bullet lists unless giving a breathing exercise. Validate feelings first, then offer one gentle, practical idea. Ask at most one question. You are not a therapist: never diagnose. If a student mentions self-harm, hopelessness, or being in danger, respond with care, encourage them to reach out to a trusted person or local emergency services right now, and mention the SOS button in the app.`;
 
-async function askClaude(msgs, ctx) {
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      model: "claude-sonnet-4-6",
-      max_tokens: 1000,
-      system: `${SYSTEM_PROMPT}\n\nToday's context: stress level ${ctx.level}, slept ${ctx.sleep}h, studied ${ctx.study}h, screen ${ctx.screen}h, exam in ${ctx.exam} days.`,
-      messages: msgs,
-    }),
-  });
-  const data = await res.json();
-  const text = (data.content || []).map((i) => (i.type === "text" ? i.text : "")).filter(Boolean).join("\n");
-  if (!text) throw new Error("empty");
-  return text;
-}
-
 function getInitial(name) {
   if (!name || typeof name !== "string") return "U";
   const trimmed = name.trim();
   return trimmed.length > 0 ? trimmed.charAt(0).toUpperCase() : "U";
 }
 
-function fallbackReply(text, level = "Moderate") {
+function fallbackReply(text, level = "Moderate", ctx = {}) {
   const t = (text || "").toLowerCase();
 
-  // Safety crisis boundary check
-  if (
-    t.includes("kill myself") ||
-    t.includes("suicide") ||
-    t.includes("end my life") ||
-    t.includes("harm myself") ||
-    t.includes("want to die") ||
-    t.includes("hopeless")
-  ) {
+  const matchesAny = (patterns, text) => patterns.some((p) => p.test(text));
+
+  // 1. Safety crisis boundary check
+  if (matchesAny([/kill\s+myself/i, /suicide/i, /end\s+my\s+life/i, /harm\s+myself/i, /want\s+to\s+die/i, /\bhopeless\b/i], t)) {
     return (
       "I hear how much pain you are carrying right now, but please know you do not have to carry it alone. " +
       "Please connect with caring, professional support right now:\n\n" +
@@ -132,19 +110,106 @@ function fallbackReply(text, level = "Moderate") {
     );
   }
 
-  if (t.includes("breath")) {
-    return "Let's try a simple reset together. Breathe in through your nose for 4 counts, hold gently for 4, then breathe out slowly for 6. Let your shoulders drop as you release. How does that feel right now?";
+  // 2. Academic Pressures, Exams & Deadlines
+  if (matchesAny([/\b(study\w*|exam\w*|test\w*|assignment\w*|deadline\w*|homework|procrastinat\w*|grades?|quiz\w*)\b/i], t)) {
+    const examNote = ctx && ctx.exam != null ? ` (your exam is in ${ctx.exam} days)` : "";
+    return (
+      `Academic pressure can feel intense${examNote}. The secret to getting through is chunking: ` +
+      "pick just ONE small, 20-minute focus block, and give yourself full permission to ignore the rest for now. " +
+      "What is the single most urgent task on your plate today?"
+    );
   }
-  if (t.includes("sleep")) {
-    return "When sleep is disrupted, everyday tasks feel much heavier. Tonight, try putting your phone across the room 30 minutes before sleep and take 5 slow breaths in bed. Are you having trouble falling asleep or waking up early?";
+
+  // 3. Sleep & Nighttime Rest
+  if (matchesAny([/\b(sleep\w*|insomnia|can't\s+sleep|awake|nightmare\w*|bedtime|restless\w*)\b/i], t)) {
+    return (
+      "When sleep is disrupted, everything feels heavier the next day. Tonight, try setting your phone " +
+      "across the room 30 minutes before bed and taking five slow breaths in the dark. " +
+      "Are you having trouble falling asleep, or waking up in the middle of the night?"
+    );
   }
-  if (t.includes("study") || t.includes("overwhelm") || t.includes("exam")) {
-    return "That is a lot to carry on your mind. Let's break it down into just one 20-minute focus block, and set aside the rest for now. What is the single most urgent topic on your plate today?";
+
+  // 4. Breathing & Immediate Relaxation
+  if (matchesAny([/\b(breath|breathe|breathing|relax|chill|unwind|meditat\w*)\b/i, /\bcalm\b/i], t)) {
+    return (
+      "Let's take a slow reset breath together right now:\n\n" +
+      "1. Breathe in gently through your nose for 4 counts...\n" +
+      "2. Hold softly for 4 counts...\n" +
+      "3. Exhale slowly and completely through your mouth for 6 counts.\n\n" +
+      "Let your shoulders drop as you release. How does your chest feel right now?"
+    );
   }
-  if (t.includes("stress") || t.includes("anxious") || t.includes("panic")) {
-    return `I hear you, and it is completely understandable to feel that way with your stress level being ${level.toLowerCase()}. Would you like to try a quick 2-minute breathing exercise, or talk through what is making you feel this way?`;
+
+  // 5. Anxiety, Panic & Overwhelm
+  if (matchesAny([/\b(stress\w*|anxious\w*|anxiety|panic|overwhelm\w*|nervous\w*|worry\w*|racing|scared|fear)\b/i], t)) {
+    return (
+      `I hear you, and those feelings are completely understandable with your stress level being ${level.toLowerCase()}. ` +
+      "Let's ground right now using the 3-3-3 check: name 3 things you can see around you, " +
+      "3 sounds you can hear, and move 3 parts of your body (like your fingers, toes, and shoulders). " +
+      "What is one object you see right now?"
+    );
   }
-  return "Thank you for sharing that with me. I'm here and listening with care. Tell me a little more about what's going on, and we will take it one calm step at a time.";
+
+  // 6. Fatigue, Exhaustion & Burnout
+  if (matchesAny([/\b(tired|exhaust\w*|burnout|burnt\s+out|drained|sleepy|fatigue)\b/i, /no\s+energy/i], t)) {
+    const sleepNote = ctx && ctx.sleep != null ? ` (you logged ${ctx.sleep}h of sleep)` : "";
+    return (
+      `It sounds like your mind and body are asking for genuine rest${sleepNote}. ` +
+      "When we run on empty, everyday tasks become much heavier. Can you step away from screens " +
+      "and take a 10-minute quiet pause right now? What is the single most restful thing you could do today?"
+    );
+  }
+
+  // 7. Sadness, Loneliness & Low Mood
+  if (matchesAny([/\b(sad\w*|unhappy|cry|crying|lonely|alone|depress\w*|blue|heartbroken)\b/i], t)) {
+    return (
+      "I'm really sorry things feel heavy and lonely right now. It is completely okay to feel sad, " +
+      "and you don't have to force yourself to feel positive right away. Would you like to talk about " +
+      "what brought this on, or would you prefer a gentle breathing pause together?"
+    );
+  }
+
+  // 8. Gratitude & Politeness
+  if (matchesAny([/\b(thank\w*|appreciat\w*|helpful|cheers)\b/i, /good\s+to\s+know/i], t)) {
+    return (
+      "You are very welcome. Remember to give yourself credit for checking in on your well-being today. " +
+      "I'm always right here whenever you need a quick breather or someone to talk through your day with."
+    );
+  }
+
+  // 9. Greetings & Salutations
+  if (matchesAny([/\b(hello|hi|hey|howdy|sup)\b/i, /good\s+morning/i, /good\s+evening/i, /good\s+afternoon/i], t)) {
+    let greeting = "Hello! I'm here and glad you reached out. ";
+    if (ctx && ctx.exam != null && Number(ctx.exam) <= 7) {
+      greeting += `I see your exam is coming up in ${ctx.exam} days. `;
+    }
+    return (
+      greeting +
+      "How has your day been going so far? Tell me what's on your mind, and we can take it one calm step at a time."
+    );
+  }
+
+  // 10. General Guidance & Advice
+  if (matchesAny([/\b(advice|tips?|guide\w*)\b/i, /what\s+should\s+i\s+do/i, /what\s+to\s+do/i, /\bhelp\b/i], t)) {
+    return (
+      "Here is a great student wellness starting point: drink a tall glass of water, stand up to stretch " +
+      "your back, and give yourself a 5-minute break from coursework. What area feels like it needs the most " +
+      "attention today: your sleep, study routine, or taking time to unwind?"
+    );
+  }
+
+  // 11. Contextual Fall-through
+  if (ctx && ctx.sleep != null && Number(ctx.sleep) < 6) {
+    return (
+      `Thank you for sharing that with me. I noticed you logged ${ctx.sleep} hours of sleep today. ` +
+      "Short sleep can amplify everything we feel. How are your energy levels holding up right now?"
+    );
+  }
+
+  return (
+    "Thank you for sharing that with me. I'm here and listening with care. Tell me a little more about " +
+    "what's going on, and we will take it one calm step at a time."
+  );
 }
 
 /* ------------------------------------------------------------------ */
@@ -458,7 +523,23 @@ function Illustration() {
   );
 }
 
-function StressRing({ score, size = 190 }) {
+function StressRing({ score, size = 190, hasLogged = true }) {
+  if (!hasLogged || score == null) {
+    return (
+      <div className="ring-wrap" style={{ width: size, height: size }}>
+        <svg width={size} height={size} style={{ transform: "rotate(-90deg)" }} aria-hidden="true">
+          <circle cx={size / 2} cy={size / 2} r={size / 2 - 14} fill="none" stroke="#EAEEFB" strokeWidth="14" />
+        </svg>
+        <div className="ring-c">
+          <div style={{ fontSize: 12, color: "var(--mute)", fontWeight: 600 }}>Habit Balance</div>
+          <div style={{ fontSize: size > 160 ? 30 : 24, fontWeight: 700, letterSpacing: "-.02em", color: "var(--mute)" }}>
+            —<span style={{ fontSize: 14, fontWeight: 500, color: "var(--mute)" }}>/100</span>
+          </div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: "var(--mute)", marginTop: 2 }}>Not logged today</div>
+        </div>
+      </div>
+    );
+  }
   const level = levelOf(score);
   const r = size / 2 - 14;
   const c = 2 * Math.PI * r;
@@ -484,8 +565,8 @@ function StressRing({ score, size = 190 }) {
   );
 }
 
-function StressCard({ score, compact, title = "Lifestyle Habit Index (0–100)" }) {
-  const level = levelOf(score);
+function StressCard({ score, compact, title = "Lifestyle Habit Index (0–100)", hasLogged = true }) {
+  const level = hasLogged && score != null ? levelOf(score) : null;
   return (
     <div className="card" style={{ textAlign: "center" }}>
       <div className="row" style={{ marginBottom: 6 }}>
@@ -494,7 +575,7 @@ function StressCard({ score, compact, title = "Lifestyle Habit Index (0–100)" 
           Daily Habits (Rule-based)
         </span>
       </div>
-      <StressRing score={score} size={compact ? 170 : 200} />
+      <StressRing score={score} size={compact ? 170 : 200} hasLogged={hasLogged} />
       <div className="states">
         {["Low", "Moderate", "High"].map((s) => (
           <div key={s} className="state" style={level === s ? { background: LEVEL_SOFT[s], color: LEVEL_COLOR[s] } : null}>
@@ -503,7 +584,9 @@ function StressCard({ score, compact, title = "Lifestyle Habit Index (0–100)" 
         ))}
       </div>
       <p className="muted" style={{ fontSize: 13, textAlign: "left", lineHeight: 1.4, marginTop: 10 }}>
-        Calculated from daily sleep, study, screen time, and mood logs. Reflects routine load (0–100), not a clinical or ML stress evaluation.
+        {hasLogged
+          ? "Calculated from daily sleep, study, screen time, and mood logs. Reflects routine load (0–100), not a clinical or ML stress evaluation."
+          : "No check-in recorded for today yet. Complete your daily check-in to compute today's routine habit index."}
       </p>
     </div>
   );
@@ -707,11 +790,12 @@ function Dashboard({
   const greet = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
   const mood = MOODS.find((m) => m.id === today.mood);
   const recs = recsFor(today).slice(0, 3);
+  const isLogged = Boolean(today && today.done);
   const m = [
-    { i: Moon, l: "Sleep", v: `${today.sleep} hrs`, c: "t-lav" },
-    { i: BookOpen, l: "Study", v: `${today.study} hrs`, c: "t-blue" },
-    { i: Smartphone, l: "Screen time", v: `${today.screen} hrs`, c: "t-green" },
-    { i: CalendarDays, l: "Days until exam", v: today.exam, c: "t-blue" },
+    { i: Moon, l: "Sleep", v: isLogged && today.sleep != null ? `${today.sleep} hrs` : "—", c: "t-lav" },
+    { i: BookOpen, l: "Study", v: isLogged && today.study != null ? `${today.study} hrs` : "—", c: "t-blue" },
+    { i: Smartphone, l: "Screen time", v: isLogged && today.screen != null ? `${today.screen} hrs` : "—", c: "t-green" },
+    { i: CalendarDays, l: "Days until exam", v: isLogged && today.exam != null ? today.exam : "—", c: "t-blue" },
   ];
   return (
     <>
@@ -722,7 +806,11 @@ function Dashboard({
           <div className="card">
             <div className="row">
               <h3>Today's Wellness Check-In</h3>
-              {today.done && <span className="chip" style={{ background: "var(--grn2)", color: "var(--grn)" }}><Check size={14} /> Done</span>}
+              {isLogged ? (
+                <span className="chip" style={{ background: "var(--grn2)", color: "var(--grn)" }}><Check size={14} /> Done</span>
+              ) : (
+                <span className="chip" style={{ background: "var(--lav2)", color: "var(--lav)" }}>Pending</span>
+              )}
             </div>
             <div className="metrics">
               {m.map((x) => (
@@ -734,14 +822,16 @@ function Dashboard({
             </div>
             <div className="moodrow">
               <div className="tile t-lav" style={{ width: 40, height: 40, borderRadius: 12 }}>
-                {mood ? <mood.icon size={22} /> : <Smile size={22} />}
+                {isLogged && mood ? <mood.icon size={22} /> : <Smile size={22} />}
               </div>
               <div>
-                <div style={{ fontWeight: 700 }}>Feeling {mood ? mood.label.toLowerCase() : "okay"}</div>
-                <div className="muted" style={{ fontSize: 13 }}>Today's logged mood</div>
+                <div style={{ fontWeight: 700 }}>{isLogged && mood ? `Feeling ${mood.label.toLowerCase()}` : "Not logged yet"}</div>
+                <div className="muted" style={{ fontSize: 13 }}>{isLogged ? "Today's logged mood" : "Check in to record your mood"}</div>
               </div>
             </div>
-            <button className="btn btn-p btn-lg" style={{ width: "100%" }} onClick={() => { setWtab("checkin"); setTab("wellness"); }}>Complete Today's Check-In</button>
+            <button className="btn btn-p btn-lg" style={{ width: "100%" }} onClick={() => { setWtab("checkin"); setTab("wellness"); }}>
+              {isLogged ? "Update Today's Check-In" : "Complete Today's Check-In"}
+            </button>
           </div>
           <div className="card">
             <div className="row" style={{ marginBottom: 16 }}>
@@ -763,7 +853,7 @@ function Dashboard({
         </div>
         <div className="stack">
           {/* Flow B: Daily Lifestyle Habit Index */}
-          <StressCard score={score} title="Lifestyle Habit Index (0–100)" />
+          <StressCard score={score} hasLogged={isLogged} title="Lifestyle Habit Index (0–100)" />
 
           {/* Flow A: Latest ML Stress Assessment */}
           {loadingAssessment && !latestAssessment && (
@@ -1195,21 +1285,38 @@ function Chat({ ctx }) {
   }, [msgs, busy]);
 
   const send = async (raw) => {
-  const t = (raw ?? text).trim();
-  if (!t || busy) return;
-  const next = [...msgs, { role: "user", content: t }];
-  setMsgs(next);
-  setText("");
-  setBusy(true);
-  try {
-    const formatted = next.map((m) => ({ role: m.role, content: m.content }));
-    const data = await api.sendMessage(formatted, ctx);
-    setMsgs((p) => [...p, { role: "assistant", content: data.reply }]);
-  } catch (err) {
-    setMsgs((p) => [...p, { role: "assistant", content: fallbackReply(t, ctx?.level) }]);
-  }
-  setBusy(false);
-};
+    const t = (raw ?? text).trim();
+    if (!t || busy) return;
+    const next = [...msgs, { role: "user", content: t }];
+    setMsgs(next);
+    setText("");
+    setBusy(true);
+    try {
+      const formatted = next.map((m) => ({ role: m.role, content: m.content }));
+      const data = await api.sendMessage(formatted, ctx);
+      setMsgs((p) => [
+        ...p,
+        {
+          role: "assistant",
+          content: data.reply,
+          is_fallback: Boolean(data.is_fallback),
+          source: data.source,
+        },
+      ]);
+    } catch (err) {
+      const fallbackText = fallbackReply(t, ctx?.level, ctx);
+      setMsgs((p) => [
+        ...p,
+        {
+          role: "assistant",
+          content: `[Offline Support Guide]\n\n${fallbackText}`,
+          is_fallback: true,
+          source: "offline-guide",
+        },
+      ]);
+    }
+    setBusy(false);
+  };
 
   return (
     <div className="card chat">
@@ -1218,7 +1325,19 @@ function Chat({ ctx }) {
         <div><h3>MindMate AI</h3><div className="muted" style={{ fontSize: 14 }}>Your supportive wellness companion</div></div>
       </div>
       <div className="chat-b" ref={box} aria-live="polite">
-        {msgs.map((m, i) => <div key={i} className={`msg ${m.role === "user" ? "me" : "ai"}`}>{m.content}</div>)}
+        {msgs.map((m, i) => (
+          <div key={i} className={`msg ${m.role === "user" ? "me" : "ai"}`}>
+            {m.is_fallback && (
+              <div style={{ fontSize: 11, fontWeight: 700, color: "var(--lav)", marginBottom: 6, display: "flex", alignItems: "center", gap: 6 }}>
+                <span className="chip" style={{ fontSize: 10, padding: "2px 6px", background: "var(--lav2)", color: "var(--lav)" }}>
+                  Offline Guide
+                </span>
+                <span style={{ fontSize: 11, color: "var(--mute)", fontWeight: 500 }}>AI service unavailable</span>
+              </div>
+            )}
+            <div style={{ whiteSpace: "pre-line" }}>{m.content}</div>
+          </div>
+        ))}
         {busy && <div className="msg ai" aria-label="MindMate is typing"><span className="dots"><i /><i /><i /></span></div>}
       </div>
       <div className="chat-f">
@@ -2099,8 +2218,8 @@ export default function MindMate() {
   const [session, setSession] = useState(null);
   const [toastMsg, setToastMsg] = useState(null);
   const [resultShown, setResultShown] = useState(false);
-  const [user, setUser] = useState({ name: "Aadi", email: "aadi@northfield.edu", college: "Northfield University", avatar: "" });
-  const [today, setToday] = useState({ sleep: 7.2, study: 6, screen: 5.5, exam: 18, mood: "okay", note: "", done: false });
+  const [user, setUser] = useState({ name: "", email: "", college: "", avatar: "" });
+  const [today, setToday] = useState({ sleep: null, study: null, screen: null, exam: null, mood: "okay", note: "", done: false });
   const [contacts, setContacts] = useState([]);
   const [autoNotify, setAutoNotify] = useState(true);
   const [prefs, setPrefs] = useState({ daily: true, tips: true, alerts: true });
@@ -2132,7 +2251,10 @@ export default function MindMate() {
   const [historyStack, setHistoryStack] = useState(["dashboard"]);
   const [historyIndex, setHistoryIndex] = useState(0);
 
-  const score = useMemo(() => computeStress(today), [today]);
+  const score = useMemo(() => {
+    if (!today || !today.done) return null;
+    return computeStress(today);
+  }, [today]);
   const toast = (m) => setToastMsg(m);
 
   useEffect(() => {
@@ -2262,6 +2384,8 @@ export default function MindMate() {
         }
         if (todayData && todayData.date) {
           setToday({ ...todayData, done: true });
+        } else {
+          setToday({ sleep: null, study: null, screen: null, exam: null, mood: "okay", note: "", done: false });
         }
         if (Array.isArray(contactList)) {
           setContacts(contactList);
@@ -2288,11 +2412,16 @@ export default function MindMate() {
     setUser((p) => ({ ...p, ...u }));
     setScreen("app");
     setTab("dashboard");
+    setToday({ sleep: null, study: null, screen: null, exam: null, mood: "okay", note: "", done: false });
     api.getContacts().then((list) => {
       if (Array.isArray(list)) setContacts(list);
     }).catch(() => {});
     api.getToday().then((todayData) => {
-      if (todayData && todayData.date) setToday({ ...todayData, done: true });
+      if (todayData && todayData.date) {
+        setToday({ ...todayData, done: true });
+      } else {
+        setToday({ sleep: null, study: null, screen: null, exam: null, mood: "okay", note: "", done: false });
+      }
     }).catch(() => {});
     loadLatestAssessment();
   };
@@ -2300,6 +2429,7 @@ export default function MindMate() {
     localStorage.removeItem("mm_token");
     setContacts([]);
     setUser({ name: "", email: "", college: "", avatar: "" });
+    setToday({ sleep: null, study: null, screen: null, exam: null, mood: "okay", note: "", done: false });
     setLatestAssessment(null);
     setAssessmentError(null);
     setMenu(false);

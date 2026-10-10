@@ -7,5 +7,12 @@ router = APIRouter(prefix="/chat", tags=["AI Companion"])
 
 @router.post("/message", response_model=ChatResponse)
 def chat_message(payload: ChatRequest):
-    reply = generate_companion_reply(messages=payload.messages, context=payload.context)
-    return ChatResponse(reply=reply)
+    result = generate_companion_reply(messages=payload.messages, context=payload.context)
+    if isinstance(result, dict):
+        return ChatResponse(
+            reply=result["reply"],
+            source=result.get("source", "llm"),
+            is_fallback=result.get("is_fallback", False),
+            provider=result.get("provider"),
+        )
+    return ChatResponse(reply=str(result))
