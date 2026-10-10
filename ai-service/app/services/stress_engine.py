@@ -37,8 +37,8 @@ RECS: List[Dict[str, Any]] = [
         "id": "sleep",
         "title": "Improve your sleep routine",
         "blurb": "Wind down with dim lights and no scrolling for the last half hour.",
-        "mins": 15,
-        "secs": 900,
+        "mins": 30,
+        "secs": 1800,
         "tint": "blue",
     },
     {

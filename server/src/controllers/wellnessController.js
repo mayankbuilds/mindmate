@@ -6,8 +6,12 @@ const createOrUpdateCheckIn = async (req, res) => {
   const { sleep, study, screen, exam, mood, note } = req.body;
   const todayDate = new Date().toISOString().split("T")[0];
 
-  // Call FastAPI to compute score & suggestions
-  const aiResult = await computeStressWithAI({ sleep, study, screen, exam, mood, note });
+  // Call FastAPI to compute score & suggestions (with reliable fallback)
+  const aiResult = (await computeStressWithAI({ sleep, study, screen, exam, mood, note })) || {
+    score: 50,
+    level: "Moderate",
+    recommendations: [],
+  };
 
   const checkInData = {
     userId: req.user._id,

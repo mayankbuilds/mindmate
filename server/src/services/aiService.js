@@ -72,14 +72,70 @@ const getFallbackReply = (userMessage = "", stressLevel = "Moderate") => {
   );
 };
 
+const LOCAL_MOODS = {
+  great: 0,
+  good: 5,
+  okay: 12,
+  stressed: 24,
+  overwhelmed: 34,
+};
+
+const LOCAL_RECS = [
+  { id: "breath", title: "2-minute breathing exercise", blurb: "Slow, even breaths settle your nervous system and clear your head.", mins: 2, secs: 120, tint: "blue" },
+  { id: "walk", title: "Take a 10-minute walk", blurb: "Fresh air and movement lift your mood. Leave your phone in your pocket.", mins: 10, secs: 600, tint: "green" },
+  { id: "screen", title: "Take a screen break", blurb: "Look away, stretch and rest your eyes. Try the 20-20-20 rule.", mins: 5, secs: 300, tint: "lav" },
+  { id: "sleep", title: "Improve your sleep routine", blurb: "Wind down with dim lights and no scrolling for the last half hour.", mins: 30, secs: 1800, tint: "blue" },
+  { id: "focus", title: "Try a focused study session", blurb: "25 minutes on one topic, then a real break. Small blocks beat marathons.", mins: 25, secs: 1500, tint: "green" },
+];
+
+const computeLocalStress = (item = {}) => {
+  let sleep = Number(item.sleep ?? 7.5);
+  let study = Number(item.study ?? 6.0);
+  let screen = Number(item.screen ?? 4.5);
+  const exam = Number(item.exam ?? 14);
+  const mood = item.mood || "okay";
+  const note = item.note || "";
+
+  const total = sleep + study + screen;
+  if (total > 24) {
+    const scale = 24 / total;
+    sleep = Math.round(sleep * scale * 2) / 2;
+    study = Math.round(study * scale * 2) / 2;
+    screen = Math.round(screen * scale * 2) / 2;
+  }
+
+  const sleepP = Math.max(0, 8 - sleep) * 8 + (sleep > 10 ? 4 : 0);
+  const studyP = Math.max(0, study - 4) * 3;
+  const screenP = Math.max(0, screen - 3) * 4;
+  const examP = exam <= 3 ? 18 : exam <= 7 ? 14 : exam <= 14 ? 9 : exam <= 30 ? 5 : 2;
+  const moodP = LOCAL_MOODS[mood] != null ? LOCAL_MOODS[mood] : 10;
+  const words = ["anxious", "panic", "can't", "cannot", "tired", "exhausted", "stress", "worried", "scared", "hopeless"];
+  const noteP = Math.min(12, words.filter((w) => (note || "").toLowerCase().includes(w)).length * 4);
+  const score = Math.round(Math.max(4, Math.min(98, 10 + sleepP + studyP + screenP + examP + moodP + noteP)));
+  const level = score < 35 ? "Low" : score < 65 ? "Moderate" : "High";
+
+  const w = {
+    breath: 2,
+    walk: 1,
+    screen: screen > 5 ? 4 : 0,
+    sleep: sleep < 7 ? 4 : 0,
+    focus: study > 7 ? 0 : 1,
+  };
+  const recommendations = [...LOCAL_RECS].sort((a, b) => (w[b.id] || 0) - (w[a.id] || 0));
+
+  return { score, level, recommendations };
+};
+
 const computeStressWithAI = async (data) => {
   try {
     const response = await axios.post(`${FASTAPI_URL}/wellness/compute-stress`, data, { timeout: 6000 });
-    return response.data;
+    if (response.data && response.data.score != null) {
+      return response.data;
+    }
   } catch (error) {
-    // Local calculation fallback if FastAPI service is temporarily offline
-    return null;
+    // Local calculation fallback if FastAPI service is temporarily offline or not deployed
   }
+  return computeLocalStress(data);
 };
 
 const callGeminiDirectly = async (messages, context = {}) => {
