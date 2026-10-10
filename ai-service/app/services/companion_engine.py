@@ -13,17 +13,23 @@ from app.schemas.chat import StudentContext, ChatMessage
 
 logger = logging.getLogger(__name__)
 
-CALMFLOW_SYSTEM_PROMPT = """You are "CalmFlow", an empathetic, grounded, and supportive wellness companion inside a Stress Prediction and Tracking platform.
+CALMFLOW_SYSTEM_PROMPT = """You are "CalmFlow", an empathetic, grounded, and supportive wellness companion inside a Student Stress Prediction and Tracking platform.
 
 Context Provided:
-- User's Predicted Stress Level: {{STRESS_LEVEL}}
-- User's Assessment Score: {{STRESS_SCORE}}
+- ML Stress Assessment (7-Question GAD-7 Random Forest Survey Pattern Model):
+  Predicted Class: {{PREDICTED_CLASS}}
+  Class Probabilities: {{CLASS_PROBABILITIES}}
+  Assessed At: {{ASSESSED_AT}}
+- Daily Lifestyle Habit Index (Transparent Rule-Based Heuristic 0–100, NOT ML):
+  Habit Index: {{LIFESTYLE_SCORE}}
+  Logged Habits: {{HABIT_METRICS}}
 
-Your Core Responsibilities:
-1. Tone & Empathy: Speak warmly, calmly, and attentively. Acknowledge the user's stress level gently without making them feel pathologized or overly worried.
-2. Brevity: Stressed users get overwhelmed easily. Keep responses concise (under 2-3 short paragraphs or 80-100 words max). Never send walls of text.
-3. Grounding Interventions: When stress is high, offer one simple, actionable grounding exercise (e.g., 4-7-8 breathing, box breathing, or 5-4-3-2-1 sensory grounding). Suggest just ONE step at a time.
-4. Boundaries & Safety:
+Crucial Clinical & Architectural Boundaries:
+1. Two Separate Systems: The "ML Stress Assessment" evaluates questionnaire patterns. The "Lifestyle Habit Index" is a separate deterministic daily habit score (sleep, study, screen). Never confuse or conflate the two.
+2. Tone & Empathy: Speak warmly, calmly, and attentively. Acknowledge the user's stress level and lifestyle gently without making them feel pathologized or overly worried.
+3. Brevity: Stressed users get overwhelmed easily. Keep responses concise (under 2-3 short paragraphs or 80-100 words max). Never send walls of text.
+4. Grounding Interventions: When stress is high, offer one simple, actionable grounding exercise (e.g., 4-7-8 breathing, box breathing, or 5-4-3-2-1 sensory grounding). Suggest just ONE step at a time.
+5. Boundaries & Safety:
    - You are NOT a doctor, psychiatrist, or licensed medical professional.
    - Never diagnose, prescribe medications, or claim clinical certainty.
    - If the user expresses thoughts of self-harm, severe crisis, or hopelessness, immediately stop conversational banter, express warm concern, and provide verified crisis hotline information (e.g., Tele-MANAS: 14416 / 1800-891-4416 or KIRAN: 1800-599-0019 in India, or 988 in the US/Global emergency lines)."""
@@ -159,31 +165,64 @@ def generate_companion_reply(messages: List[ChatMessage], context: Optional[Stud
     - Attempts live LLM invocation (Groq or Gemini via OpenAI client).
     - If unconfigured, times out, or errors, provides an explicitly labelled offline fallback.
     """
-    stress_level = "Moderate"
-    stress_score = "Not assessed yet"
+    predicted_class = "Not assessed yet"
+    probabilities_str = "Unavailable"
+    assessed_at_str = "Unavailable"
+    lifestyle_score_str = "Not logged today"
+    habit_details = []
+
+    effective_stress_level = "Moderate"
 
     if context:
-        if context.level:
-            stress_level = str(context.level)
-        if context.score is not None:
-            stress_score = f"{context.score}/100"
+        if context.predicted_class:
+            predicted_class = f"{context.predicted_class} Stress"
+            effective_stress_level = context.predicted_class
+        elif context.level:
+            predicted_class = f"{context.level} Stress"
+            effective_stress_level = context.level
 
-    system_instruction = CALMFLOW_SYSTEM_PROMPT.replace(
-        "{{STRESS_LEVEL}}", stress_level
-    ).replace("{{STRESS_SCORE}}", stress_score)
+        if context.probabilities:
+            prob_parts = []
+            for k, v in context.probabilities.items():
+                if isinstance(v, (int, float)):
+                    pct = round(v * 100 if v <= 1 else v)
+                    prob_parts.append(f"{k}: {pct}%")
+                else:
+                    prob_parts.append(f"{k}: {v}")
+            if prob_parts:
+                probabilities_str = ", ".join(prob_parts)
 
-    if context and (context.sleep or context.study or context.screen or context.exam):
-        details = []
+        if context.assessed_at:
+            assessed_at_str = str(context.assessed_at)
+
+        if context.lifestyle_score is not None:
+            lvl_suffix = f" ({context.lifestyle_level})" if context.lifestyle_level else ""
+            lifestyle_score_str = f"{context.lifestyle_score}/100{lvl_suffix}"
+        elif context.score is not None:
+            lifestyle_score_str = f"{context.score}/100"
+
         if context.sleep is not None:
-            details.append(f"Sleep: {context.sleep}h")
+            habit_details.append(f"Sleep: {context.sleep}h")
         if context.study is not None:
-            details.append(f"Study: {context.study}h")
+            habit_details.append(f"Study: {context.study}h")
         if context.screen is not None:
-            details.append(f"Screen: {context.screen}h")
+            habit_details.append(f"Screen: {context.screen}h")
         if context.exam is not None:
-            details.append(f"Exam in: {context.exam} days")
-        if details:
-            system_instruction += f"\nAdditional Context: {', '.join(details)}"
+            habit_details.append(f"Exam in: {context.exam} days")
+        if context.mood:
+            habit_details.append(f"Mood: {context.mood}")
+        if context.note:
+            habit_details.append(f"Note: '{context.note}'")
+
+    habit_metrics_str = ", ".join(habit_details) if habit_details else "No habits logged today"
+
+    system_instruction = (
+        CALMFLOW_SYSTEM_PROMPT.replace("{{PREDICTED_CLASS}}", predicted_class)
+        .replace("{{CLASS_PROBABILITIES}}", probabilities_str)
+        .replace("{{ASSESSED_AT}}", assessed_at_str)
+        .replace("{{LIFESTYLE_SCORE}}", lifestyle_score_str)
+        .replace("{{HABIT_METRICS}}", habit_metrics_str)
+    )
 
     formatted_messages = [{"role": "system", "content": system_instruction}]
     for msg in messages:
@@ -199,7 +238,7 @@ def generate_companion_reply(messages: List[ChatMessage], context: Optional[Stud
         client, model_name, provider_name = get_llm_client_and_model()
         if not client or not model_name:
             # Explicitly labelled fallback when no provider credentials exist
-            raw_fallback = fallback_reply(last_user_msg, stress_level, context)
+            raw_fallback = fallback_reply(last_user_msg, effective_stress_level, context)
             return {
                 "reply": format_fallback_message(raw_fallback),
                 "source": "fallback",
@@ -269,7 +308,7 @@ def generate_companion_reply(messages: List[ChatMessage], context: Optional[Stud
         logger.warning(
             f"[CompanionEngine] LLM request failed ({error_type}): {sanitized_err}. Using offline fallback."
         )
-        raw_fallback = fallback_reply(last_user_msg, stress_level, context)
+        raw_fallback = fallback_reply(last_user_msg, effective_stress_level, context)
         return {
             "reply": format_fallback_message(raw_fallback),
             "source": "fallback",

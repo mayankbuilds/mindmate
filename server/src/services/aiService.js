@@ -2,17 +2,23 @@ const axios = require("axios");
 
 const getFastApiUrl = () => process.env.FASTAPI_SERVICE_URL || "http://localhost:8000";
 
-const CALMFLOW_SYSTEM_PROMPT = `You are "CalmFlow", an empathetic, grounded, and supportive wellness companion inside a Stress Prediction and Tracking platform.
+const CALMFLOW_SYSTEM_PROMPT = `You are "CalmFlow", an empathetic, grounded, and supportive wellness companion inside a Student Stress Prediction and Tracking platform.
 
 Context Provided:
-- User's Predicted Stress Level: {{STRESS_LEVEL}}
-- User's Assessment Score: {{STRESS_SCORE}}
+- ML Stress Assessment (7-Question GAD-7 Random Forest Survey Pattern Model):
+  Predicted Class: {{PREDICTED_CLASS}}
+  Class Probabilities: {{CLASS_PROBABILITIES}}
+  Assessed At: {{ASSESSED_AT}}
+- Daily Lifestyle Habit Index (Transparent Rule-Based Heuristic 0–100, NOT ML):
+  Habit Index: {{LIFESTYLE_SCORE}}
+  Logged Habits: {{HABIT_METRICS}}
 
-Your Core Responsibilities:
-1. Tone & Empathy: Speak warmly, calmly, and attentively. Acknowledge the user's stress level gently without making them feel pathologized or overly worried.
-2. Brevity: Stressed users get overwhelmed easily. Keep responses concise (under 2-3 short paragraphs or 80-100 words max). Never send walls of text.
-3. Grounding Interventions: When stress is high, offer one simple, actionable grounding exercise (e.g., 4-7-8 breathing, box breathing, or 5-4-3-2-1 sensory grounding). Suggest just ONE step at a time.
-4. Boundaries & Safety:
+Crucial Clinical & Architectural Boundaries:
+1. Two Separate Systems: The "ML Stress Assessment" evaluates questionnaire patterns. The "Lifestyle Habit Index" is a separate deterministic daily habit score (sleep, study, screen). Never confuse or conflate the two.
+2. Tone & Empathy: Speak warmly, calmly, and attentively. Acknowledge the user's stress level and lifestyle gently without making them feel pathologized or overly worried.
+3. Brevity: Stressed users get overwhelmed easily. Keep responses concise (under 2-3 short paragraphs or 80-100 words max). Never send walls of text.
+4. Grounding Interventions: When stress is high, offer one simple, actionable grounding exercise (e.g., 4-7-8 breathing, box breathing, or 5-4-3-2-1 sensory grounding). Suggest just ONE step at a time.
+5. Boundaries & Safety:
    - You are NOT a doctor, psychiatrist, or licensed medical professional.
    - Never diagnose, prescribe medications, or claim clinical certainty.
    - If the user expresses thoughts of self-harm, severe crisis, or hopelessness, immediately stop conversational banter, express warm concern, and provide verified crisis hotline information (e.g., Tele-MANAS: 14416 / 1800-891-4416 or KIRAN: 1800-599-0019 in India, or 988 in the US/Global emergency lines).`;
@@ -21,6 +27,7 @@ const matchesAny = (patterns, text) => patterns.some((p) => p.test(text));
 
 const getFallbackReply = (userMessage = "", stressLevel = "Moderate", context = {}) => {
   const t = (userMessage || "").trim();
+  const effectiveStress = (context && (context.predicted_class || context.level)) || stressLevel || "Moderate";
 
   // 1. Safety crisis boundary check
   if (matchesAny([/kill\s+myself/i, /suicide/i, /end\s+my\s+life/i, /harm\s+myself/i, /want\s+to\s+die/i, /\bhopeless\b/i], t)) {
@@ -66,7 +73,7 @@ const getFallbackReply = (userMessage = "", stressLevel = "Moderate", context = 
   // 5. Anxiety, Panic & Overwhelm
   if (matchesAny([/\b(stress\w*|anxious\w*|anxiety|panic|overwhelm\w*|nervous\w*|worry\w*|racing|scared|fear)\b/i], t)) {
     return (
-      `I hear you, and those feelings are completely understandable with your stress level being ${stressLevel.toLowerCase()}. ` +
+      `I hear you, and those feelings are completely understandable with your stress level being ${effectiveStress.toLowerCase()}. ` +
       "Let's ground right now using the 3-3-3 check: name 3 things you can see around you, " +
       "3 sounds you can hear, and move 3 parts of your body (like your fingers, toes, and shoulders). " +
       "What is one object you see right now?"
@@ -291,7 +298,7 @@ const computeStressWithAI = async (data) => {
 
 const sendChatMessageToAI = async (messages, context = {}) => {
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user")?.content || "";
-  const stressLevel = context.level || "Moderate";
+  const stressLevel = context.predicted_class || context.level || "Moderate";
   const fastApiUrl = getFastApiUrl();
   const fastApiTimeout = Number(process.env.FASTAPI_TIMEOUT_MS || 20000);
 

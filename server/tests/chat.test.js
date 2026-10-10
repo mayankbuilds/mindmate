@@ -136,5 +136,103 @@ test("Phase C: AI Companion & Offline Fallback System", async (t) => {
       process.env.FASTAPI_TIMEOUT_MS = "20000";
     }
   });
+
+  await t.test("7. chatController normalizes ML predicted_class and lifestyle score context", async () => {
+    process.env.FASTAPI_SERVICE_URL = "http://127.0.0.1:59999";
+    const fakeReq = {
+      body: {
+        message: "I am having bad anxiety and stress",
+        context: {
+          predicted_class: "Severe",
+          probabilities: { No: 0.05, Mild: 0.1, Moderate: 0.15, Severe: 0.7 },
+          assessed_at: "2026-10-10T10:00:00.000Z",
+          lifestyle_score: 75,
+          lifestyle_level: "High",
+          sleep: 5.0,
+        },
+      },
+    };
+
+    let responseData = null;
+    const fakeRes = {
+      json: (data) => {
+        responseData = data;
+        return data;
+      },
+    };
+
+    await postChatMessage(fakeReq, fakeRes);
+    assert.ok(responseData);
+    assert.ok(responseData.reply);
+    // When offline fallback is triggered, anxiety intent incorporates effective stress level "severe"
+    assert.match(responseData.reply, /stress level being severe/i);
+  });
+
+  await t.test("8. chatController retrieves and trusts database records over client-supplied spoofed context", async () => {
+    process.env.FASTAPI_SERVICE_URL = "http://127.0.0.1:59999";
+    const Assessment = require("../src/models/Assessment");
+    const CheckIn = require("../src/models/CheckIn");
+
+    // Mock Assessment and CheckIn findOne to return genuine DB records
+    const origAssessmentFindOne = Assessment.findOne;
+    const origCheckInFindOne = CheckIn.findOne;
+
+    Assessment.findOne = (query) => ({
+      sort: () =>
+        Promise.resolve({
+          userId: query.userId,
+          predicted_class: "Mild",
+          probabilities: { No: 0.2, Mild: 0.6, Moderate: 0.15, Severe: 0.05 },
+          createdAt: new Date("2026-10-10T09:00:00Z"),
+        }),
+    });
+
+    CheckIn.findOne = (query) => ({
+      sort: () =>
+        Promise.resolve({
+          userId: query.userId,
+          stressScore: 35,
+          stressLevel: "Low",
+          sleep: 8.0,
+          study: 4.0,
+          screen: 2.0,
+          exam: 21,
+          mood: "great",
+          note: "feeling rested",
+          date: new Date().toISOString().split("T")[0],
+        }),
+    });
+
+    try {
+      // Client maliciously/erroneously claims Severe stress with 2h sleep
+      const fakeReq = {
+        user: { _id: "60d5ec49f1b2c8b1f8e4e1a1" },
+        body: {
+          message: "I am feeling anxious",
+          context: {
+            predicted_class: "Severe", // spoofed client value
+            sleep: 2.0, // spoofed client value
+          },
+        },
+      };
+
+      let responseData = null;
+      const fakeRes = {
+        json: (data) => {
+          responseData = data;
+          return data;
+        },
+      };
+
+      await postChatMessage(fakeReq, fakeRes);
+      assert.ok(responseData);
+      assert.ok(responseData.reply);
+      // Fallback reply uses genuine DB assessment "mild", overriding spoofed "Severe"
+      assert.match(responseData.reply, /stress level being mild/i);
+    } finally {
+      Assessment.findOne = origAssessmentFindOne;
+      CheckIn.findOne = origCheckInFindOne;
+    }
+  });
 });
 

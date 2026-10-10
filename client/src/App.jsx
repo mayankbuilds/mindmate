@@ -96,6 +96,7 @@ function getInitial(name) {
 
 function fallbackReply(text, level = "Moderate", ctx = {}) {
   const t = (text || "").toLowerCase();
+  const effectiveLevel = ctx?.predicted_class || ctx?.level || level || "Moderate";
 
   const matchesAny = (patterns, text) => patterns.some((p) => p.test(text));
 
@@ -143,7 +144,7 @@ function fallbackReply(text, level = "Moderate", ctx = {}) {
   // 5. Anxiety, Panic & Overwhelm
   if (matchesAny([/\b(stress\w*|anxious\w*|anxiety|panic|overwhelm\w*|nervous\w*|worry\w*|racing|scared|fear)\b/i], t)) {
     return (
-      `I hear you, and those feelings are completely understandable with your stress level being ${level.toLowerCase()}. ` +
+      `I hear you, and those feelings are completely understandable with your stress level being ${effectiveLevel.toLowerCase()}. ` +
       "Let's ground right now using the 3-3-3 check: name 3 things you can see around you, " +
       "3 sounds you can hear, and move 3 parts of your body (like your fingers, toes, and shoulders). " +
       "What is one object you see right now?"
@@ -800,12 +801,189 @@ function Dashboard({
   return (
     <>
       <h1 className="h1">{greet}, {(user.name || "").trim() || "friend"}</h1>
-      <p className="sub">Welcome to your daily mental wellness space.</p>
-      <div className="grid-d">
+      <p className="sub">AI-driven student stress prediction and mental wellness support.</p>
+
+      {/* ------------------------------------------------------------- */}
+      {/* PRIMARY FEATURE HERO: ML Stress Assessment                    */}
+      {/* ------------------------------------------------------------- */}
+      <section aria-label="ML Stress Assessment Hero">
+        {loadingAssessment && !latestAssessment && (
+          <div className="card" style={{ marginTop: 22, padding: "32px 20px", textAlign: "center" }}>
+            <RefreshCw size={24} className="float" color="var(--lav)" style={{ margin: "0 auto 10px" }} />
+            <div style={{ fontWeight: 600, fontSize: 14 }}>Loading latest ML assessment...</div>
+          </div>
+        )}
+
+        {assessmentError && !latestAssessment && (
+          <div className="card" style={{ marginTop: 22, background: "#FFF3F4", borderColor: "#F3C4C8", padding: 20 }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <AlertCircle size={22} color="#B24853" style={{ flexShrink: 0 }} />
+              <div style={{ flex: 1, fontSize: 14, color: "#B24853", fontWeight: 600 }}>{assessmentError}</div>
+              {onRefreshAssessment && (
+                <button className="btn btn-s btn-sm" onClick={onRefreshAssessment}>
+                  <RefreshCw size={12} /> Retry
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        {!loadingAssessment && !latestAssessment && !assessmentError && (
+          <div className="card" style={{ marginTop: 22, background: "linear-gradient(135deg, #F0F4FF, #F9F5FF)", borderColor: "#DCE5FC", padding: "28px" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 16 }}>
+              <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+                <div className="tile t-lav" style={{ width: 52, height: 52, borderRadius: 16, background: "#fff" }}>
+                  <Activity size={26} color="var(--lav)" />
+                </div>
+                <div>
+                  <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                    <h2 style={{ fontSize: 20, fontWeight: 800 }}>ML Stress Assessment</h2>
+                    <span className="chip" style={{ fontSize: 11, padding: "2px 8px", background: "var(--lav2)", color: "var(--lav)" }}>
+                      Random Forest ML Model
+                    </span>
+                  </div>
+                  <p className="muted" style={{ fontSize: 14, marginTop: 4, maxWidth: 560 }}>
+                    No assessment completed yet. Take our 7-indicator questionnaire to evaluate your stress pattern with our verified machine learning pipeline.
+                  </p>
+                </div>
+              </div>
+              <button className="btn btn-p btn-lg" onClick={() => setTab("assessment")}>
+                Take First ML Assessment <ArrowRight size={17} />
+              </button>
+            </div>
+          </div>
+        )}
+
+        {latestAssessment && (() => {
+          const cls = latestAssessment.predicted_class || "Moderate";
+          const pal = CLASS_PALETTE[cls] || CLASS_PALETTE.Moderate;
+          const probs = latestAssessment.probabilities || {};
+          const dateStr = latestAssessment.createdAt
+            ? new Date(latestAssessment.createdAt).toLocaleDateString(undefined, {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : "Recent";
+
+          return (
+            <div className="card" style={{ marginTop: 22, borderColor: "#DCE5FC", padding: "26px 28px" }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 14, marginBottom: 18 }}>
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <span className="chip" style={{ background: "var(--blue2)", color: "var(--blue)", fontSize: 12, fontWeight: 700 }}>
+                      <Cpu size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />
+                      Primary Feature: ML Stress Prediction
+                    </span>
+                    <span className="muted" style={{ fontSize: 13 }}>Assessed on {dateStr}</span>
+                  </div>
+                  <h2 style={{ fontSize: 22, fontWeight: 800, marginTop: 6 }}>
+                    Latest ML Stress Assessment
+                  </h2>
+                </div>
+
+                <div style={{ display: "flex", gap: 10 }}>
+                  <button className="btn btn-p btn-sm" onClick={() => setTab("assessment")}>
+                    Take New Assessment <ArrowRight size={14} />
+                  </button>
+                  <button className="btn btn-s btn-sm" onClick={() => setTab("history")}>
+                    View History
+                  </button>
+                </div>
+              </div>
+
+              <div
+                style={{
+                  padding: "16px 20px",
+                  borderRadius: 16,
+                  background: pal.bg,
+                  border: `1.5px solid ${pal.color}25`,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center",
+                  flexWrap: "wrap",
+                  gap: 12,
+                  marginBottom: 20,
+                }}
+              >
+                <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                  <div
+                    style={{
+                      width: 48,
+                      height: 48,
+                      borderRadius: 14,
+                      background: "#fff",
+                      display: "grid",
+                      placeItems: "center",
+                      color: pal.color,
+                      boxShadow: "0 2px 8px rgba(0,0,0,0.06)",
+                    }}
+                  >
+                    <Cpu size={24} />
+                  </div>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.05em", color: pal.color }}>
+                      Model Prediction
+                    </div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: "var(--ink)", marginTop: 2 }}>
+                      {pal.label}
+                    </div>
+                  </div>
+                </div>
+                <span className="chip" style={{ background: "#fff", color: pal.color, fontSize: 14, fontWeight: 800, padding: "6px 14px", border: `1px solid ${pal.color}40` }}>
+                  {probs[cls] != null ? `${Math.round(probs[cls] * 100)}% Match` : "Verified ML"}
+                </span>
+              </div>
+
+              <div>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
+                  <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink)" }}>
+                    Probability Distribution:
+                  </span>
+                  <span className="muted" style={{ fontSize: 12 }}>
+                    Evaluated by trained Random Forest pipeline on 7 survey indicators.
+                  </span>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
+                  {["No", "Mild", "Moderate", "Severe"].map((c) => {
+                    const p = probs[c] != null ? Math.round(probs[c] * 100) : 0;
+                    const cPal = CLASS_PALETTE[c] || CLASS_PALETTE.Moderate;
+                    const isWinner = c === cls;
+                    return (
+                      <div key={c} style={{ background: "#F8FAFF", padding: "10px 12px", borderRadius: 12, border: isWinner ? `1.5px solid ${cPal.color}40` : "1px solid var(--line)" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 5 }}>
+                          <span style={{ fontWeight: isWinner ? 800 : 600, color: isWinner ? cPal.color : "var(--mute)" }}>
+                            {c} {isWinner && "✓"}
+                          </span>
+                          <span style={{ fontWeight: 800, color: isWinner ? cPal.color : "var(--ink)" }}>{p}%</span>
+                        </div>
+                        <div style={{ width: "100%", height: 6, background: "#EEF1FA", borderRadius: 999, overflow: "hidden" }}>
+                          <div style={{ width: `${p}%`, height: "100%", background: cPal.color, borderRadius: 999 }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+      </section>
+
+      {/* ------------------------------------------------------------- */}
+      {/* SECONDARY & SUPPORTING SECTIONS                               */}
+      {/* ------------------------------------------------------------- */}
+      <div className="grid-d" style={{ marginTop: 22 }}>
+        {/* Left: Secondary Section - Daily Lifestyle Tracker & Heuristic Score */}
         <div className="stack">
           <div className="card">
             <div className="row">
-              <h3>Today's Wellness Check-In</h3>
+              <div>
+                <h3 style={{ fontSize: 17 }}>Today's Wellness Check-In</h3>
+                <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>Daily lifestyle tracker</div>
+              </div>
               {isLogged ? (
                 <span className="chip" style={{ background: "var(--grn2)", color: "var(--grn)" }}><Check size={14} /> Done</span>
               ) : (
@@ -833,9 +1011,32 @@ function Dashboard({
               {isLogged ? "Update Today's Check-In" : "Complete Today's Check-In"}
             </button>
           </div>
+
+          {/* Flow B: Daily Lifestyle Habit Index */}
+          <StressCard score={score} hasLogged={isLogged} title="Lifestyle Habit Index (0–100)" />
+        </div>
+
+        {/* Right: Supporting Section - AI Companion & Non-clinical Suggestions */}
+        <div className="stack">
+          {/* AI Companion Preview Card */}
+          <div className="card calm">
+            <div className="tile t-lav" style={{ background: "#fff" }}><MessageCircle size={22} /></div>
+            <h3 style={{ margin: "14px 0 6px" }}>Need someone to talk to?</h3>
+            <p className="muted" style={{ fontSize: 14, marginBottom: 16 }}>
+              CalmFlow is here to listen and help you decompress, any time of day.
+            </p>
+            <button className="btn btn-p btn-sm" onClick={() => setTab("ai")}>
+              Chat with CalmFlow <ArrowRight size={14} />
+            </button>
+          </div>
+
+          {/* Suggested Practical Non-clinical Activities */}
           <div className="card">
             <div className="row" style={{ marginBottom: 16 }}>
-              <h3>Suggested for you</h3>
+              <div>
+                <h3 style={{ fontSize: 17 }}>Suggested for you</h3>
+                <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>Non-clinical wellness pauses</div>
+              </div>
               <button className="linkb" onClick={() => { setWtab("tips"); setTab("wellness"); }}>See all</button>
             </div>
             <div style={{ display: "grid", gap: 10 }}>
@@ -843,173 +1044,15 @@ function Dashboard({
                 <div key={r.id} className="row" style={{ padding: 12, borderRadius: 16, background: "#F6F8FF" }}>
                   <div style={{ display: "flex", gap: 12, alignItems: "center", minWidth: 0 }}>
                     <div className={`tile t-${r.tint}`}><r.icon size={20} /></div>
-                    <div style={{ minWidth: 0 }}><div style={{ fontWeight: 700, fontSize: 15 }}>{r.title}</div><div className="muted" style={{ fontSize: 13 }}>{r.mins} min</div></div>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontWeight: 700, fontSize: 15 }}>{r.title}</div>
+                      <div className="muted" style={{ fontSize: 13 }}>{r.mins} min</div>
+                    </div>
                   </div>
                   <button className="btn btn-g btn-sm" onClick={() => openSession(r)}>Start</button>
                 </div>
               ))}
             </div>
-          </div>
-        </div>
-        <div className="stack">
-          {/* Flow B: Daily Lifestyle Habit Index */}
-          <StressCard score={score} hasLogged={isLogged} title="Lifestyle Habit Index (0–100)" />
-
-          {/* Flow A: Latest ML Stress Assessment */}
-          {loadingAssessment && !latestAssessment && (
-            <div className="card" style={{ padding: "28px 20px", textAlign: "center" }}>
-              <RefreshCw size={22} className="float" color="var(--lav)" style={{ margin: "0 auto 8px" }} />
-              <div style={{ fontWeight: 600, fontSize: 14 }}>Loading latest ML assessment...</div>
-            </div>
-          )}
-
-          {assessmentError && !latestAssessment && (
-            <div className="card" style={{ background: "#FFF3F4", borderColor: "#F3C4C8", padding: 18 }}>
-              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <AlertCircle size={20} color="#B24853" style={{ flexShrink: 0 }} />
-                <div style={{ flex: 1, fontSize: 13, color: "#B24853", fontWeight: 600 }}>{assessmentError}</div>
-                {onRefreshAssessment && (
-                  <button className="btn btn-s btn-sm" onClick={onRefreshAssessment}>
-                    <RefreshCw size={12} /> Retry
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          {!loadingAssessment && !latestAssessment && !assessmentError && (
-            <div className="card" style={{ background: "linear-gradient(135deg, #F0F4FF, #F9F5FF)", borderColor: "#DCE5FC" }}>
-              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-                <div className="tile t-lav" style={{ background: "#fff" }}><Activity size={22} color="var(--lav)" /></div>
-                <div>
-                  <h3 style={{ fontSize: 16 }}>ML Stress Assessment</h3>
-                  <span className="chip" style={{ fontSize: 11, padding: "2px 6px", background: "var(--lav2)", color: "var(--lav)", marginTop: 2 }}>
-                    Random Forest Model
-                  </span>
-                </div>
-              </div>
-              <p className="muted" style={{ fontSize: 13, marginTop: 10, lineHeight: 1.4 }}>
-                No assessment completed yet. Take our 7-indicator questionnaire to evaluate your stress pattern with our verified machine learning pipeline.
-              </p>
-              <button className="btn btn-p btn-sm" style={{ marginTop: 14, width: "100%" }} onClick={() => setTab("assessment")}>
-                Take First ML Assessment <ArrowRight size={15} />
-              </button>
-            </div>
-          )}
-
-          {latestAssessment && (
-            (() => {
-              const cls = latestAssessment.predicted_class || "Moderate";
-              const pal = CLASS_PALETTE[cls] || CLASS_PALETTE.Moderate;
-              const probs = latestAssessment.probabilities || {};
-              const dateStr = latestAssessment.createdAt
-                ? new Date(latestAssessment.createdAt).toLocaleDateString(undefined, {
-                    month: "short",
-                    day: "numeric",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })
-                : "Recent";
-
-              return (
-                <div className="card" style={{ borderColor: "#DCE5FC" }}>
-                  <div className="row" style={{ marginBottom: 10, alignItems: "flex-start" }}>
-                    <div>
-                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                        <h3 style={{ fontSize: 16 }}>Latest ML Stress Assessment</h3>
-                      </div>
-                      <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
-                        Assessed on {dateStr}
-                      </div>
-                    </div>
-                    <span
-                      className="chip"
-                      style={{
-                        fontSize: 12,
-                        padding: "3px 10px",
-                        background: pal.bg,
-                        color: pal.color,
-                        fontWeight: 700,
-                      }}
-                    >
-                      <Cpu size={13} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />
-                      {cls} Stress
-                    </span>
-                  </div>
-
-                  <div
-                    style={{
-                      padding: "10px 14px",
-                      borderRadius: 12,
-                      background: pal.bg,
-                      marginBottom: 14,
-                      display: "flex",
-                      justifyContent: "space-between",
-                      alignItems: "center",
-                    }}
-                  >
-                    <div>
-                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: pal.color }}>
-                        Model Prediction
-                      </div>
-                      <div style={{ fontSize: 16, fontWeight: 800, color: "var(--ink)", marginTop: 2 }}>
-                        {pal.label}
-                      </div>
-                    </div>
-                    <span className="chip" style={{ background: "#fff", color: pal.color, fontSize: 12, fontWeight: 700 }}>
-                      {probs[cls] != null ? `${Math.round(probs[cls] * 100)}% Match` : "Verified"}
-                    </span>
-                  </div>
-
-                  <div style={{ marginBottom: 12 }}>
-                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--mute)", marginBottom: 8 }}>
-                      Probability Distribution:
-                    </div>
-                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
-                      {["No", "Mild", "Moderate", "Severe"].map((c) => {
-                        const p = probs[c] != null ? Math.round(probs[c] * 100) : 0;
-                        const cPal = CLASS_PALETTE[c] || CLASS_PALETTE.Moderate;
-                        const isWinner = c === cls;
-                        return (
-                          <div key={c} style={{ background: "#F8FAFF", padding: "6px 8px", borderRadius: 8 }}>
-                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 }}>
-                              <span style={{ fontWeight: isWinner ? 700 : 500, color: isWinner ? cPal.color : "var(--mute)" }}>
-                                {c} {isWinner && "✓"}
-                              </span>
-                              <span style={{ fontWeight: 700 }}>{p}%</span>
-                            </div>
-                            <div style={{ width: "100%", height: 4, background: "#EEF1FA", borderRadius: 999, overflow: "hidden" }}>
-                              <div style={{ width: `${p}%`, height: "100%", background: cPal.color, borderRadius: 999 }} />
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  <p className="muted" style={{ fontSize: 12, lineHeight: 1.4, margin: "10px 0 14px" }}>
-                    Evaluated by trained Random Forest pipeline on 7 survey indicators.
-                  </p>
-
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <button className="btn btn-p btn-sm" style={{ flex: 1 }} onClick={() => setTab("assessment")}>
-                      Retake Assessment <ArrowRight size={14} />
-                    </button>
-                    <button className="btn btn-s btn-sm" onClick={() => setTab("history")}>
-                      View History
-                    </button>
-                  </div>
-                </div>
-              );
-            })()
-          )}
-
-          <div className="card calm">
-            <div className="tile t-lav" style={{ background: "#fff" }}><MessageCircle size={22} /></div>
-            <h3 style={{ margin: "14px 0 6px" }}>Need to talk?</h3>
-            <p className="muted" style={{ fontSize: 14, marginBottom: 16 }}>MindMate AI is here to listen, any time of day.</p>
-            <button className="btn btn-s btn-sm" onClick={() => setTab("ai")}>Open AI Companion</button>
           </div>
         </div>
       </div>
@@ -1272,8 +1315,66 @@ const PROMPTS = [
   "Guide me through breathing",
 ];
 
-function Chat({ ctx }) {
-  const [msgs, setMsgs] = useState([{ role: "assistant", content: "Hi, I'm MindMate. I'm glad you're here. How has your day been so far?" }]);
+const DEFAULT_CHAT_MSGS = [
+  { role: "assistant", content: "Hi, I'm MindMate. I'm glad you're here. How has your day been so far?" },
+];
+
+function getChatStorageKey(u) {
+  if (!u) return null;
+  const id = u.email || u._id || (u.name ? u.name.replace(/\s+/g, "_") : null);
+  return id ? `mm_chat_${id}` : null;
+}
+
+function loadUserChatMsgs(u) {
+  const key = getChatStorageKey(u);
+  if (!key || typeof sessionStorage === "undefined") return DEFAULT_CHAT_MSGS;
+  try {
+    const raw = sessionStorage.getItem(key);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+    }
+  } catch (_) {}
+  return DEFAULT_CHAT_MSGS;
+}
+
+function saveUserChatMsgs(u, msgs) {
+  const key = getChatStorageKey(u);
+  if (!key || typeof sessionStorage === "undefined" || !Array.isArray(msgs)) return;
+  try {
+    sessionStorage.setItem(key, JSON.stringify(msgs));
+  } catch (_) {}
+}
+
+function clearAllUserChats() {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    const keysToRemove = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith("mm_chat_")) keysToRemove.push(k);
+    }
+    keysToRemove.forEach((k) => sessionStorage.removeItem(k));
+  } catch (_) {}
+}
+
+function clearOtherUserChats(u) {
+  if (typeof sessionStorage === "undefined") return;
+  try {
+    const keepKey = getChatStorageKey(u);
+    const keysToRemove = [];
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const k = sessionStorage.key(i);
+      if (k && k.startsWith("mm_chat_") && k !== keepKey) keysToRemove.push(k);
+    }
+    keysToRemove.forEach((k) => sessionStorage.removeItem(k));
+  } catch (_) {}
+}
+
+function Chat({ msgs: propMsgs, setMsgs: propSetMsgs, ctx }) {
+  const [localMsgs, setLocalMsgs] = useState(DEFAULT_CHAT_MSGS);
+  const msgs = propMsgs || localMsgs;
+  const setMsgs = propSetMsgs || setLocalMsgs;
   const [text, setText] = useState("");
   const [busy, setBusy] = useState(false);
   const box = useRef(null);
@@ -1434,6 +1535,36 @@ function History({ today, score, onNavigate }) {
   const avgLifestyleScore = rows.length > 0 ? Math.round(rows.reduce((a, r) => a + r.stress, 0) / rows.length) : null;
   const avgLifestyleLevel = avgLifestyleScore != null ? levelOf(avgLifestyleScore) : null;
 
+  const latestAssessment = assessments.length > 0 ? assessments[0] : null;
+  const latestCls = latestAssessment ? (latestAssessment.predicted_class || "Moderate") : "Moderate";
+  const latestPal = CLASS_PALETTE[latestCls] || CLASS_PALETTE.Moderate;
+  const latestProbs = latestAssessment ? (latestAssessment.probabilities || {}) : {};
+  const latestDateStr = latestAssessment?.createdAt
+    ? new Date(latestAssessment.createdAt).toLocaleDateString(undefined, {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })
+    : "Recent";
+
+  // Class Distribution for Recharts BarChart
+  const distributionData = useMemo(() => {
+    const counts = { No: 0, Mild: 0, Moderate: 0, Severe: 0 };
+    assessments.forEach((a) => {
+      const c = a.predicted_class || "Moderate";
+      if (counts[c] != null) counts[c]++;
+      else counts[c] = 1;
+    });
+    return [
+      { name: "No Stress", count: counts.No, fill: CLASS_PALETTE.No.color },
+      { name: "Mild Stress", count: counts.Mild, fill: CLASS_PALETTE.Mild.color },
+      { name: "Moderate Stress", count: counts.Moderate, fill: CLASS_PALETTE.Moderate.color },
+      { name: "Severe Stress", count: counts.Severe, fill: CLASS_PALETTE.Severe.color },
+    ];
+  }, [assessments]);
+
   const charts = [
     { t: "Sleep", u: "hrs", k: "sleep", color: "#7C6CE6", kind: "bar" },
     { t: "Study", u: "hrs", k: "study", color: "#5B8DEF", kind: "bar" },
@@ -1500,7 +1631,101 @@ function History({ today, score, onNavigate }) {
 
           {!loadingAssessments && !assessmentsError && assessments.length > 0 && (
             <>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+              {/* ML Assessment Overview Header & Metrics */}
+              <div className="card" style={{ padding: "24px 26px", borderColor: "#DCE5FC" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 14, marginBottom: 18 }}>
+                  <div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                      <span className="chip" style={{ background: "var(--lav2)", color: "var(--lav)", fontSize: 12, fontWeight: 700 }}>
+                        <Cpu size={13} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />
+                        ML Assessment Overview
+                      </span>
+                      <span className="muted" style={{ fontSize: 13 }}>
+                        Based on {assessments.length} total assessment{assessments.length > 1 ? "s" : ""}
+                      </span>
+                    </div>
+                    <h2 style={{ fontSize: 20, fontWeight: 800, marginTop: 6 }}>
+                      Historical Stress Pattern Analysis
+                    </h2>
+                  </div>
+
+                  {onNavigate && (
+                    <button className="btn btn-p btn-sm" onClick={() => onNavigate("assessment")}>
+                      <Plus size={15} /> Take New Assessment
+                    </button>
+                  )}
+                </div>
+
+                {/* Top Overview Metrics */}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 12, marginBottom: 20 }}>
+                  <div style={{ background: "#F8FAFF", padding: "16px", borderRadius: 14, border: "1px solid var(--line)" }}>
+                    <div className="muted" style={{ fontSize: 12, fontWeight: 600 }}>Total Assessments</div>
+                    <div style={{ fontSize: 28, fontWeight: 800, color: "var(--ink)", marginTop: 4 }}>
+                      {assessments.length}
+                    </div>
+                    <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>Questionnaires completed</div>
+                  </div>
+
+                  <div style={{ background: latestPal.bg, padding: "16px", borderRadius: 14, border: `1.5px solid ${latestPal.color}30` }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: latestPal.color }}>Latest Predicted Class</div>
+                    <div style={{ fontSize: 22, fontWeight: 800, color: latestPal.color, marginTop: 4 }}>
+                      {latestCls} Stress
+                    </div>
+                    <div className="muted" style={{ fontSize: 11, marginTop: 2 }}>{latestDateStr}</div>
+                  </div>
+
+                  <div style={{ background: "#F8FAFF", padding: "14px 16px", borderRadius: 14, border: "1px solid var(--line)", gridColumn: "span 2" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, fontWeight: 600, marginBottom: 8 }}>
+                      <span className="muted">Latest Assessment Probabilities</span>
+                      <span style={{ fontWeight: 700, color: latestPal.color }}>{latestCls} match: {Math.round((latestProbs[latestCls] || 0) * 100)}%</span>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
+                      {["No", "Mild", "Moderate", "Severe"].map((c) => {
+                        const p = latestProbs[c] != null ? Math.round(latestProbs[c] * 100) : 0;
+                        const cPal = CLASS_PALETTE[c] || CLASS_PALETTE.Moderate;
+                        const isWinner = c === latestCls;
+                        return (
+                          <div key={c}>
+                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 }}>
+                              <span style={{ fontWeight: isWinner ? 700 : 500, color: isWinner ? cPal.color : "var(--mute)" }}>{c}</span>
+                              <span style={{ fontWeight: 700 }}>{p}%</span>
+                            </div>
+                            <div style={{ width: "100%", height: 5, background: "#EEF1FA", borderRadius: 999, overflow: "hidden" }}>
+                              <div style={{ width: `${p}%`, height: "100%", background: cPal.color, borderRadius: 999 }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Recharts Class Distribution Chart */}
+                <div style={{ paddingTop: 16, borderTop: "1px solid var(--line)" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                    <div>
+                      <h3 style={{ fontSize: 15, fontWeight: 700 }}>Assessment Class Distribution</h3>
+                      <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>Breakdown across all completed assessments</div>
+                    </div>
+                  </div>
+                  <div style={{ width: "100%", height: 180 }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={distributionData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#EEF1FA" vertical={false} />
+                        <XAxis dataKey="name" {...axis} />
+                        <YAxis allowDecimals={false} {...axis} />
+                        <Tooltip
+                          contentStyle={tipStyle}
+                          formatter={(val) => [`${val} assessment${val === 1 ? "" : "s"}`, "Count"]}
+                        />
+                        <Bar dataKey="count" radius={[6, 6, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8, marginBottom: 2 }}>
                 <span className="muted" style={{ fontSize: 14 }}>
                   Showing {assessments.length} genuine model prediction{assessments.length > 1 ? "s" : ""}
                 </span>
@@ -1537,8 +1762,8 @@ function History({ today, score, onNavigate }) {
                           </span>
                           <span className="muted" style={{ fontSize: 13 }}>{formattedDate}</span>
                         </div>
-                        <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
-                          Model: {a.model_version || "RandomForest_MultiTier_v1"}
+                        <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                          7-Question GAD-7 Survey Pattern Assessment
                         </div>
                       </div>
 
@@ -2224,6 +2449,9 @@ export default function MindMate() {
   const [autoNotify, setAutoNotify] = useState(true);
   const [prefs, setPrefs] = useState({ daily: true, tips: true, alerts: true });
 
+  // AI Companion session-scoped chat messages
+  const [chatMsgs, setChatMsgs] = useState(DEFAULT_CHAT_MSGS);
+
   // Latest ML assessment state for Dashboard & App synchronization
   const [latestAssessment, setLatestAssessment] = useState(null);
   const [loadingAssessment, setLoadingAssessment] = useState(true);
@@ -2255,6 +2483,37 @@ export default function MindMate() {
     if (!today || !today.done) return null;
     return computeStress(today);
   }, [today]);
+
+  const chatContext = useMemo(() => ({
+    // Flow A: ML Assessment Context
+    predicted_class: latestAssessment?.predicted_class || null,
+    probabilities: latestAssessment?.probabilities || null,
+    assessed_at: latestAssessment?.createdAt || null,
+
+    // Flow B: Lifestyle Habit Tracking
+    lifestyle_score: score != null ? score : null,
+    lifestyle_level: score != null ? levelOf(score) : null,
+
+    // Flow B: Daily Check-In Context
+    sleep: today?.done && today?.sleep != null ? today.sleep : null,
+    study: today?.done && today?.study != null ? today.study : null,
+    screen: today?.done && today?.screen != null ? today.screen : null,
+    exam: today?.done && today?.exam != null ? today.exam : null,
+    mood: today?.done && today?.mood ? today.mood : null,
+    note: today?.done && today?.note ? today.note : null,
+    has_logged_today: Boolean(today?.done),
+
+    // Backward-compatible fields
+    level: latestAssessment?.predicted_class || (score != null ? levelOf(score) : "Moderate"),
+    score: score != null ? score : null,
+  }), [latestAssessment, score, today]);
+
+  useEffect(() => {
+    if (user && (user.email || user._id || user.name)) {
+      saveUserChatMsgs(user, chatMsgs);
+    }
+  }, [chatMsgs, user]);
+
   const toast = (m) => setToastMsg(m);
 
   useEffect(() => {
@@ -2378,9 +2637,12 @@ export default function MindMate() {
       }),
     ])
       .then(([userData, todayData, contactList, assessmentsData]) => {
-        if (userData && userData.name) {
+        if (userData && (userData.name || userData.email)) {
           setUser(userData);
           if (typeof userData.autoNotify === "boolean") setAutoNotify(userData.autoNotify);
+          clearOtherUserChats(userData);
+          const loadedChat = loadUserChatMsgs(userData);
+          setChatMsgs(loadedChat);
         }
         if (todayData && todayData.date) {
           setToday({ ...todayData, done: true });
@@ -2413,6 +2675,9 @@ export default function MindMate() {
     setScreen("app");
     setTab("dashboard");
     setToday({ sleep: null, study: null, screen: null, exam: null, mood: "okay", note: "", done: false });
+    clearOtherUserChats(u);
+    const loadedChat = loadUserChatMsgs(u);
+    setChatMsgs(loadedChat);
     api.getContacts().then((list) => {
       if (Array.isArray(list)) setContacts(list);
     }).catch(() => {});
@@ -2427,6 +2692,8 @@ export default function MindMate() {
   };
   const logout = () => {
     localStorage.removeItem("mm_token");
+    clearAllUserChats();
+    setChatMsgs(DEFAULT_CHAT_MSGS);
     setContacts([]);
     setUser({ name: "", email: "", college: "", avatar: "" });
     setToday({ sleep: null, study: null, screen: null, exam: null, mood: "okay", note: "", done: false });
@@ -2543,7 +2810,7 @@ export default function MindMate() {
                 <>
                   <h1 className="h1">AI Companion</h1>
                   <p className="sub">A calm place to talk things through.</p>
-                  <Chat ctx={{ level: levelOf(score), score: score, sleep: today.sleep, study: today.study, screen: today.screen, exam: today.exam }} />
+                  <Chat msgs={chatMsgs} setMsgs={setChatMsgs} ctx={chatContext} />
                 </>
               )}
               {tab === "history" && <History today={today} score={score} onNavigate={navigateTo} />}

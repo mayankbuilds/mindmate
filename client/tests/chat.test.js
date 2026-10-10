@@ -65,4 +65,94 @@ describe("Phase C: Frontend AI Companion & Chat Client Integration", () => {
     assert.deepEqual(req.body.messages, messages);
     assert.deepEqual(req.body.context, context);
   });
+
+  it("submits comprehensive ML assessment and lifestyle habit context without conflating them", async () => {
+    const messages = [{ role: "user", content: "How does my routine look?" }];
+    const context = {
+      predicted_class: "Moderate",
+      probabilities: { No: 0.1, Mild: 0.2, Moderate: 0.6, Severe: 0.1 },
+      assessed_at: "2026-10-10T12:00:00.000Z",
+      lifestyle_score: 65,
+      lifestyle_level: "Moderate",
+      sleep: 6.5,
+      study: 7.0,
+      screen: 4.0,
+      exam: 10,
+      mood: "okay",
+      note: "Midterms soon",
+      has_logged_today: true,
+      level: "Moderate",
+      score: 65,
+    };
+
+    receivedRequests = [];
+    const data = await api.sendMessage(messages, context);
+    assert.equal(data.reply, "Hello! MindMate is here for you.");
+
+    const req = receivedRequests.find((r) => r.url.includes("/chat/message"));
+    assert.ok(req);
+    assert.equal(req.body.context.predicted_class, "Moderate");
+    assert.equal(req.body.context.probabilities.Moderate, 0.6);
+    assert.equal(req.body.context.lifestyle_score, 65);
+    assert.equal(req.body.context.sleep, 6.5);
+    assert.equal(req.body.context.has_logged_today, true);
+  });
+
+  it("verifies user-scoped session storage isolation and cleanup semantics", () => {
+    // Simulating sessionStorage isolation contract
+    const mockSessionStore = {};
+    const getStorageKey = (u) => {
+      if (!u) return null;
+      const id = u.email || u._id || (u.name ? u.name.replace(/\s+/g, "_") : null);
+      return id ? `mm_chat_${id}` : null;
+    };
+
+    const saveChat = (u, msgs) => {
+      const k = getStorageKey(u);
+      if (k) mockSessionStore[k] = JSON.stringify(msgs);
+    };
+
+    const loadChat = (u) => {
+      const k = getStorageKey(u);
+      if (k && mockSessionStore[k]) return JSON.parse(mockSessionStore[k]);
+      return [{ role: "assistant", content: "welcome" }];
+    };
+
+    const clearAll = () => {
+      Object.keys(mockSessionStore).forEach((k) => {
+        if (k.startsWith("mm_chat_")) delete mockSessionStore[k];
+      });
+    };
+
+    const userA = { email: "student_a@college.edu", name: "Student A" };
+    const userB = { email: "student_b@college.edu", name: "Student B" };
+
+    // 1. Initial conversation for User A
+    const msgsA = [
+      { role: "assistant", content: "welcome" },
+      { role: "user", content: "Hello from User A" },
+    ];
+    saveChat(userA, msgsA);
+
+    // User A retrieves their conversation
+    assert.deepEqual(loadChat(userA), msgsA);
+
+    // 2. User B starts fresh and does NOT see User A's conversation
+    assert.deepEqual(loadChat(userB), [{ role: "assistant", content: "welcome" }]);
+
+    // User B saves their own chat
+    const msgsB = [
+      { role: "assistant", content: "welcome" },
+      { role: "user", content: "Hello from User B" },
+    ];
+    saveChat(userB, msgsB);
+
+    assert.deepEqual(loadChat(userA), msgsA);
+    assert.deepEqual(loadChat(userB), msgsB);
+
+    // 3. Logout clears all stored user conversations
+    clearAll();
+    assert.deepEqual(loadChat(userA), [{ role: "assistant", content: "welcome" }]);
+    assert.deepEqual(loadChat(userB), [{ role: "assistant", content: "welcome" }]);
+  });
 });

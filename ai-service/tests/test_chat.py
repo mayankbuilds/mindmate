@@ -306,3 +306,46 @@ def test_model_not_found_resilient_retry_fallback():
         second_call_model = mock_client.chat.completions.create.call_args_list[1][1]["model"]
         assert second_call_model == "gemini-3.5-flash-lite"
 
+
+def test_ml_assessment_and_lifestyle_index_context_separation():
+    """
+    Verifies that StudentContext cleanly distinguishes between:
+    - ML Stress Assessment (predicted_class, probabilities, assessed_at)
+    - Lifestyle Habit Index (lifestyle_score, lifestyle_level, sleep, study, screen)
+    """
+    mock_client = MagicMock()
+    mock_choice = MagicMock()
+    mock_choice.message.content = "I hear you, let's take a calm breath."
+    mock_client.chat.completions.create.return_value = MagicMock(choices=[mock_choice])
+
+    with patch("app.services.companion_engine.get_llm_client_and_model", return_value=(mock_client, "gemini-2.5-flash-lite", "gemini")):
+        payload = {
+            "messages": [{"role": "user", "content": "I feel stressed about my routine"}],
+            "context": {
+                "predicted_class": "Moderate",
+                "probabilities": {"No": 0.1, "Mild": 0.2, "Moderate": 0.6, "Severe": 0.1},
+                "assessed_at": "2026-10-10T12:00:00Z",
+                "lifestyle_score": 68.0,
+                "lifestyle_level": "Moderate",
+                "sleep": 6.0,
+                "study": 7.0,
+                "screen": 5.0,
+                "exam": 5,
+                "mood": "stressed",
+                "note": "Lots of deadlines",
+            },
+        }
+        response = client.post("/chat/message", json=payload)
+        assert response.status_code == 200
+
+        # Verify system prompt formatted ML assessment and lifestyle habit index separately
+        call_messages = mock_client.chat.completions.create.call_args[1]["messages"]
+        system_msg = call_messages[0]["content"]
+        assert "Predicted Class: Moderate Stress" in system_msg
+        assert "Moderate: 60%" in system_msg
+        assert "Habit Index: 68.0/100 (Moderate)" in system_msg
+        assert "Sleep: 6.0h" in system_msg
+        assert "Exam in: 5 days" in system_msg
+        assert "Mood: stressed" in system_msg
+
+
