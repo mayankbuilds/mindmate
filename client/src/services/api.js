@@ -1,7 +1,29 @@
-const getBaseUrl = () =>
-  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
-  (typeof process !== "undefined" && process.env?.VITE_API_BASE_URL) ||
-  "http://localhost:5000/api";
+const getBaseUrl = () => {
+  let envUrl = "";
+  if (typeof import.meta !== "undefined" && import.meta.env) {
+    envUrl = import.meta.env.VITE_API_URL || import.meta.env.VITE_API_BASE_URL || "";
+  }
+  if (!envUrl && typeof process !== "undefined" && process.env) {
+    envUrl = process.env.VITE_API_URL || process.env.VITE_API_BASE_URL || "";
+  }
+
+  if (envUrl && typeof envUrl === "string" && envUrl.trim()) {
+    const trimmed = envUrl.trim().replace(/\/+$/, "");
+    return trimmed.endsWith("/api") ? trimmed : `${trimmed}/api`;
+  }
+
+  // In production, fallback to relative "/api" rather than hardcoding localhost
+  const isProd =
+    (typeof import.meta !== "undefined" && Boolean(import.meta.env?.PROD)) ||
+    (typeof process !== "undefined" && process.env?.NODE_ENV === "production");
+
+  if (isProd) {
+    return "/api";
+  }
+
+  // Development fallback only
+  return "http://localhost:5000/api";
+};
 
 const getToken = () => {
   try {
@@ -73,3 +95,5 @@ export const api = {
       body: JSON.stringify({ messages, context }),
     }),
 };
+
+export { getBaseUrl };

@@ -203,7 +203,7 @@ Copy the `.env.example` templates to `.env` in their respective directories:
 ### `client/.env` (React Vite)
 | Variable | Description | Example / Default |
 | :--- | :--- | :--- |
-| `VITE_API_BASE_URL` | Base URL for API gateway requests | `http://localhost:5000/api` (or `/api` if unified) |
+| `VITE_API_URL` | Base URL for API gateway requests | `http://localhost:5000/api` (or deployed URL / relative `/api`) |
 
 ---
 

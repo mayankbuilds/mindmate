@@ -27,7 +27,7 @@ For a free or low-cost student portfolio deployment, the most reliable and maint
       ▼
 [React Frontend] (Vercel / Netlify / Render Static Site)
       │
-      ▼ (HTTPS requests to VITE_API_BASE_URL)
+      ▼ (HTTPS requests to VITE_API_URL)
 [Node.js Express Gateway] (Render Web Service)
       │                                    │
       ├──────────────────┐                 ▼
@@ -127,7 +127,7 @@ For a free or low-cost student portfolio deployment, the most reliable and maint
    - **Build Command**: `npm run build`
    - **Output Directory**: `dist`
 3. Add Environment Variable:
-   - `VITE_API_BASE_URL`: `https://mindmate-api-gateway.onrender.com/api`
+   - `VITE_API_URL`: `https://mindmate-api-gateway.onrender.com/api`
 4. Click **Deploy**.
 5. Once assigned a domain (e.g. `https://mindmate.vercel.app`), return to your Render Express service and update `CORS_ORIGIN` to match your Vercel URL.
 

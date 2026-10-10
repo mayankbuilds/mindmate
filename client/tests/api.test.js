@@ -1,7 +1,7 @@
 import { describe, it, before, after } from "node:test";
 import assert from "node:assert/strict";
 import http from "node:http";
-import { api } from "../src/services/api.js";
+import { api, getBaseUrl } from "../src/services/api.js";
 
 describe("Phase 3: Frontend API Service & Assessment Gateway Integration", () => {
   let mockServer;
@@ -167,5 +167,42 @@ describe("Phase 3: Frontend API Service & Assessment Gateway Integration", () =>
     assert.ok(Array.isArray(historyRes));
     assert.equal(historyRes.length, 1);
     assert.equal(historyRes[0].stressScore, 45);
+  });
+
+  describe("VITE_API_URL Configuration & Normalization", () => {
+    it("normalizes VITE_API_URL without /api suffix", () => {
+      process.env.VITE_API_URL = "https://mindmate-backend.onrender.com";
+      assert.equal(getBaseUrl(), "https://mindmate-backend.onrender.com/api");
+      delete process.env.VITE_API_URL;
+    });
+
+    it("normalizes VITE_API_URL with /api suffix and trailing slashes", () => {
+      process.env.VITE_API_URL = "https://mindmate-backend.onrender.com/api///";
+      assert.equal(getBaseUrl(), "https://mindmate-backend.onrender.com/api");
+      delete process.env.VITE_API_URL;
+    });
+
+    it("prioritizes VITE_API_URL over legacy VITE_API_BASE_URL", () => {
+      process.env.VITE_API_URL = "https://preferred-api.onrender.com";
+      process.env.VITE_API_BASE_URL = "https://legacy-api.onrender.com";
+      assert.equal(getBaseUrl(), "https://preferred-api.onrender.com/api");
+      delete process.env.VITE_API_URL;
+      delete process.env.VITE_API_BASE_URL;
+    });
+
+    it("falls back to localhost:5000/api in development when unset", () => {
+      delete process.env.VITE_API_URL;
+      delete process.env.VITE_API_BASE_URL;
+      assert.equal(getBaseUrl(), "http://localhost:5000/api");
+    });
+
+    it("falls back to relative /api in production when unset (no localhost)", () => {
+      const prevNodeEnv = process.env.NODE_ENV;
+      process.env.NODE_ENV = "production";
+      delete process.env.VITE_API_URL;
+      delete process.env.VITE_API_BASE_URL;
+      assert.equal(getBaseUrl(), "/api");
+      process.env.NODE_ENV = prevNodeEnv;
+    });
   });
 });
