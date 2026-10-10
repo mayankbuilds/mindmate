@@ -136,14 +136,27 @@ def test_health_endpoint_accurate_reporting():
         assert data["llm_ready"] is False
         assert data["active_model"] is None
 
-    # Case 2: Structurally valid key present -> active provider is gemini, llm_ready is True
+    # Case 2: Structurally valid key present before any request -> llm_ready is False, status is configured_unverified
+    with patch.dict(os.environ, {"GEMINI_API_KEY": "AIzaSyValidGeminiStudioKey987654321"}):
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["provider"] == "gemini"
+        assert data["llm_ready"] is False
+        assert data["llm_status"] == "configured_unverified"
+        assert data["active_provider"] == "offline-guide"
+
+    # Case 3: After a successful real Gemini request -> llm_ready is True, status is operational
+    from app.core.llm import record_llm_success
+    record_llm_success("gemini", "gemini-3.5-flash-lite")
     with patch.dict(os.environ, {"GEMINI_API_KEY": "AIzaSyValidGeminiStudioKey987654321"}):
         resp = client.get("/health")
         assert resp.status_code == 200
         data = resp.json()
         assert data["active_provider"] == "gemini"
         assert data["llm_ready"] is True
-        assert data["active_model"] == "gemini-2.5-flash-lite"
+        assert data["llm_status"] == "operational"
+        assert data["active_model"] == "gemini-3.5-flash-lite"
 
 
 def test_live_llm_gemini_mock_success():
@@ -263,7 +276,7 @@ def test_clean_api_key_removes_surrounding_quotes_and_brackets():
 def test_model_not_found_resilient_retry_fallback():
     """
     Verifies that when primary model throws model_not_found (404),
-    companion engine retries with gemini-1.5-flash before failing.
+    companion engine retries with gemini-3.5-flash-lite before failing.
     """
     mock_client = MagicMock()
 
@@ -288,8 +301,8 @@ def test_model_not_found_resilient_retry_fallback():
         data = response.json()
         assert data["is_fallback"] is False
         assert "calm response" in data["reply"]
-        # Verify it retried with gemini-1.5-flash
+        # Verify it retried with gemini-3.5-flash-lite
         assert mock_client.chat.completions.create.call_count == 2
         second_call_model = mock_client.chat.completions.create.call_args_list[1][1]["model"]
-        assert second_call_model == "gemini-1.5-flash"
+        assert second_call_model == "gemini-3.5-flash-lite"
 

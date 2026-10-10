@@ -221,22 +221,33 @@ def generate_companion_reply(messages: List[ChatMessage], context: Optional[Stud
             )
         except Exception as primary_err:
             classified = classify_llm_error(primary_err)
-            # If the specific model is not found on Google AI Studio, try resilient fallback to gemini-1.5-flash
-            if provider_name == "gemini" and classified == "model_not_found" and model_name != "gemini-1.5-flash":
-                logger.info(
-                    f"[CompanionEngine] Model '{model_name}' was not found. Attempting resilient fallback to 'gemini-1.5-flash'..."
-                )
-                try:
-                    response = client.chat.completions.create(
-                        model="gemini-1.5-flash",
-                        messages=formatted_messages,
-                        max_tokens=250,
-                        temperature=0.7,
-                        timeout=llm_timeout,
+            # If the specific model is not found on Google AI Studio, try resilient fallback to recommended models
+            if provider_name == "gemini" and classified == "model_not_found":
+                candidate_models = ["gemini-3.5-flash-lite", "gemini-3.8-flash", "gemini-2.5-flash"]
+                response = None
+                last_candidate_err = primary_err
+                for candidate in candidate_models:
+                    if candidate == model_name:
+                        continue
+                    logger.info(
+                        f"[CompanionEngine] Model '{model_name}' was not found. Attempting resilient fallback to '{candidate}'..."
                     )
-                    model_name = "gemini-1.5-flash"
-                except Exception:
-                    raise primary_err
+                    try:
+                        response = client.chat.completions.create(
+                            model=candidate,
+                            messages=formatted_messages,
+                            max_tokens=250,
+                            temperature=0.7,
+                            timeout=llm_timeout,
+                        )
+                        model_name = candidate
+                        break
+                    except Exception as cand_err:
+                        last_candidate_err = cand_err
+                        if classify_llm_error(cand_err) != "model_not_found":
+                            raise cand_err
+                if response is None:
+                    raise last_candidate_err
             else:
                 raise primary_err
 

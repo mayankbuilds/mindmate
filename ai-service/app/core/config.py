@@ -8,7 +8,7 @@ class Settings(BaseSettings):
     AI_PROVIDER: str = "gemini"
     AI_BASE_URL: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     AI_API_KEY: str = ""
-    AI_MODEL: str = "gemini-2.5-flash-lite"
+    AI_MODEL: str = "gemini-3.5-flash-lite"
     ALLOWED_ORIGINS: str = "http://localhost:5000,http://127.0.0.1:5000,https://mindmate-wellness.onrender.com"
 
     @property

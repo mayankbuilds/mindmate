@@ -142,7 +142,7 @@ def get_llm_client_and_model() -> Tuple[Optional[OpenAI], Optional[str], Optiona
     Returns (client, model_name, provider_name).
     """
     provider = (os.getenv("AI_PROVIDER") or settings.AI_PROVIDER or "gemini").strip().lower()
-    model = (os.getenv("AI_MODEL") or settings.AI_MODEL or "gemini-2.5-flash-lite").strip()
+    model = (os.getenv("AI_MODEL") or settings.AI_MODEL or "gemini-3.5-flash-lite").strip()
 
     # 1. Primary: Google Gemini
     if provider == "gemini":
@@ -192,9 +192,10 @@ def check_llm_health() -> Dict[str, Any]:
     """
     Inspects provider configuration and operational status.
     Guarantees: Does NOT report Gemini as operational merely because a key exists.
+    llm_ready is ONLY True once a real LLM request has succeeded.
     """
     provider = (os.getenv("AI_PROVIDER") or settings.AI_PROVIDER or "gemini").strip().lower()
-    model = (os.getenv("AI_MODEL") or settings.AI_MODEL or "gemini-2.5-flash-lite").strip()
+    model = (os.getenv("AI_MODEL") or settings.AI_MODEL or "gemini-3.5-flash-lite").strip()
 
     gemini_key = clean_api_key(os.getenv("GEMINI_API_KEY") or settings.GEMINI_API_KEY or "")
     gemini_valid = is_valid_gemini_key(gemini_key)
@@ -216,18 +217,41 @@ def check_llm_health() -> Dict[str, Any]:
                 "error_type": None,
                 "last_error": None,
             }
-        ready = current_status != "error"
-        status_label = current_status if current_status != "unconfigured" else "configured"
-        return {
-            "configured_provider": "gemini",
-            "configured_model": model,
-            "active_provider": "gemini",
-            "active_model": model,
-            "llm_ready": ready,
-            "llm_status": status_label,
-            "error_type": _provider_status.get("error_type"),
-            "last_error": _provider_status.get("last_error"),
-        }
+
+        if current_status == "operational":
+            succ = _provider_status.get("last_success") or {}
+            return {
+                "configured_provider": "gemini",
+                "configured_model": model,
+                "active_provider": succ.get("provider", "gemini"),
+                "active_model": succ.get("model", model),
+                "llm_ready": True,
+                "llm_status": "operational",
+                "error_type": None,
+                "last_error": None,
+            }
+        elif current_status == "error":
+            return {
+                "configured_provider": "gemini",
+                "configured_model": model,
+                "active_provider": "offline-guide",
+                "active_model": None,
+                "llm_ready": False,
+                "llm_status": "error",
+                "error_type": _provider_status.get("error_type"),
+                "last_error": _provider_status.get("last_error"),
+            }
+        else:
+            return {
+                "configured_provider": "gemini",
+                "configured_model": model,
+                "active_provider": "offline-guide",
+                "active_model": None,
+                "llm_ready": False,
+                "llm_status": "configured_unverified",
+                "error_type": None,
+                "last_error": None,
+            }
 
     if provider == "groq":
         if not groq_valid:
@@ -241,18 +265,41 @@ def check_llm_health() -> Dict[str, Any]:
                 "error_type": None,
                 "last_error": None,
             }
-        ready = current_status != "error"
-        status_label = current_status if current_status != "unconfigured" else "configured"
-        return {
-            "configured_provider": "groq",
-            "configured_model": model,
-            "active_provider": "groq",
-            "active_model": model,
-            "llm_ready": ready,
-            "llm_status": status_label,
-            "error_type": _provider_status.get("error_type"),
-            "last_error": _provider_status.get("last_error"),
-        }
+
+        if current_status == "operational":
+            succ = _provider_status.get("last_success") or {}
+            return {
+                "configured_provider": "groq",
+                "configured_model": model,
+                "active_provider": succ.get("provider", "groq"),
+                "active_model": succ.get("model", model),
+                "llm_ready": True,
+                "llm_status": "operational",
+                "error_type": None,
+                "last_error": None,
+            }
+        elif current_status == "error":
+            return {
+                "configured_provider": "groq",
+                "configured_model": model,
+                "active_provider": "offline-guide",
+                "active_model": None,
+                "llm_ready": False,
+                "llm_status": "error",
+                "error_type": _provider_status.get("error_type"),
+                "last_error": _provider_status.get("last_error"),
+            }
+        else:
+            return {
+                "configured_provider": "groq",
+                "configured_model": model,
+                "active_provider": "offline-guide",
+                "active_model": None,
+                "llm_ready": False,
+                "llm_status": "configured_unverified",
+                "error_type": None,
+                "last_error": None,
+            }
 
     return {
         "configured_provider": provider,
