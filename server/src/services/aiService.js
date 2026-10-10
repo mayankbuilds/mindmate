@@ -292,24 +292,52 @@ const computeStressWithAI = async (data) => {
 const sendChatMessageToAI = async (messages, context = {}) => {
   const lastUserMsg = [...messages].reverse().find((m) => m.role === "user")?.content || "";
   const stressLevel = context.level || "Moderate";
+  const fastApiUrl = getFastApiUrl();
+  const fastApiTimeout = Number(process.env.FASTAPI_TIMEOUT_MS || 20000);
 
   // Tier 1: Forward chat request to FastAPI AI service (where Google Gemini is primary)
   try {
     const response = await axios.post(
-      `${getFastApiUrl()}/chat/message`,
+      `${fastApiUrl}/chat/message`,
       { messages, context },
-      { timeout: 7000 }
+      { timeout: fastApiTimeout }
     );
     if (response.data && response.data.reply) {
+      if (response.data.is_fallback) {
+        console.warn(
+          `[ChatGateway] Upstream FastAPI returned offline guide fallback (error_type: ${response.data.error_type || "unspecified"}).`
+        );
+      }
       return {
         reply: response.data.reply,
         source: response.data.source || "fastapi",
         is_fallback: Boolean(response.data.is_fallback),
         provider: response.data.provider || "fastapi",
+        error_type: response.data.error_type || null,
       };
     }
-  } catch (_) {
-    // FastAPI offline or timed out -> Proceed to transparent offline fallback
+  } catch (error) {
+    let failureCategory = "unknown_error";
+    let detailMsg = error.message;
+
+    if (error.code === "ECONNABORTED" || error.code === "ETIMEDOUT") {
+      failureCategory = "cold_start_timeout";
+      detailMsg = `FastAPI service at ${fastApiUrl} timed out after ${fastApiTimeout}ms (likely Render free tier cold-start spin-up)`;
+    } else if (error.code === "ECONNREFUSED") {
+      failureCategory = "connection_refused";
+      detailMsg = `Connection refused at ${fastApiUrl} - service is offline or not running`;
+    } else if (error.code === "ENOTFOUND") {
+      failureCategory = "dns_resolution_failed";
+      detailMsg = `Hostname for ${fastApiUrl} could not be resolved`;
+    } else if (error.response) {
+      failureCategory = `upstream_http_${error.response.status}`;
+      const upstreamData = error.response.data;
+      detailMsg = typeof upstreamData === "object" ? JSON.stringify(upstreamData) : String(upstreamData);
+    }
+
+    console.warn(
+      `[ChatGateway] Warning: Failed to reach FastAPI AI Companion (${failureCategory}): ${detailMsg}. Falling back to transparent Offline Support Guide.`
+    );
   }
 
   // Tier 2: Seamless predefined rule-based Offline Support Guide fallback

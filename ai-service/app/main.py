@@ -36,5 +36,7 @@ def health_check():
         "active_model": llm_info["active_model"],
         "llm_ready": llm_info["llm_ready"],
         "llm_status": llm_info["llm_status"],
+        "llm_error_type": llm_info.get("error_type"),
+        "llm_last_error": llm_info.get("last_error"),
         "ml_inference_ready": ready,
     }

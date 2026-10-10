@@ -14,5 +14,7 @@ def chat_message(payload: ChatRequest):
             source=result.get("source", "llm"),
             is_fallback=result.get("is_fallback", False),
             provider=result.get("provider"),
+            error_type=result.get("error_type"),
+            error_message=result.get("error_message"),
         )
     return ChatResponse(reply=str(result))

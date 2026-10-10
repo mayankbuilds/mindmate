@@ -200,5 +200,96 @@ def test_gemini_timeout_and_error_sanitization():
             # Health check must show error status and must NEVER leak the secret key
             health_data = check_llm_health()
             assert health_data["llm_status"] == "error"
+            assert health_data["error_type"] == "authentication_error"
             assert secret_key not in (health_data["last_error"] or "")
             assert "[REDACTED_API_KEY]" in (health_data["last_error"] or "")
+
+            # Response should expose diagnostic error_type
+            assert data.get("error_type") == "authentication_error"
+
+
+def test_classify_llm_error_categories():
+    """
+    Verifies that classify_llm_error distinguishes connection errors, cold-start timeouts,
+    authentication errors, model-not-found errors, and quota errors.
+    """
+    from app.core.llm import classify_llm_error
+
+    # Auth error
+    class MockHttpError(Exception):
+        def __init__(self, msg, status_code):
+            super().__init__(msg)
+            self.status_code = status_code
+
+    assert classify_llm_error(MockHttpError("401 Unauthorized", 401)) == "authentication_error"
+    assert classify_llm_error(MockHttpError("Please pass a valid API key", 400)) == "authentication_error"
+    assert classify_llm_error(Exception("API_KEY_INVALID")) == "authentication_error"
+
+    # Model not found
+    assert classify_llm_error(MockHttpError("models/gemini-not-found is not found", 404)) == "model_not_found"
+    assert classify_llm_error(Exception("The model `gemini-unknown` does not exist")) == "model_not_found"
+
+    # Quota exceeded
+    assert classify_llm_error(MockHttpError("RESOURCE_EXHAUSTED", 429)) == "quota_exceeded"
+    assert classify_llm_error(Exception("Quota exceeded for quota metric")) == "quota_exceeded"
+
+    # Timeout
+    assert classify_llm_error(TimeoutError("Request timed out")) == "timeout"
+    assert classify_llm_error(Exception("APITimeoutError: Connection timed out")) == "timeout"
+
+    # Connection error
+    assert classify_llm_error(ConnectionRefusedError("Connection refused")) == "connection_error"
+    assert classify_llm_error(Exception("APIConnectionError: Failed to connect")) == "connection_error"
+
+
+def test_clean_api_key_removes_surrounding_quotes_and_brackets():
+    """
+    Verifies clean_api_key strips quotes and brackets that users may paste into Render.
+    """
+    from app.core.llm import clean_api_key, is_valid_gemini_key
+
+    raw_quoted = '"AIzaSyValidLengthKeyWithQuotes12345"'
+    cleaned = clean_api_key(raw_quoted)
+    assert cleaned == "AIzaSyValidLengthKeyWithQuotes12345"
+    assert is_valid_gemini_key(raw_quoted) is True
+
+    raw_single_quoted = "'AIzaSyValidLengthKeySingleQuotes123'"
+    assert clean_api_key(raw_single_quoted) == "AIzaSyValidLengthKeySingleQuotes123"
+
+    raw_brackets = "<AIzaSyValidLengthKeyInsideBrackets1>"
+    assert clean_api_key(raw_brackets) == "AIzaSyValidLengthKeyInsideBrackets1"
+
+
+def test_model_not_found_resilient_retry_fallback():
+    """
+    Verifies that when primary model throws model_not_found (404),
+    companion engine retries with gemini-1.5-flash before failing.
+    """
+    mock_client = MagicMock()
+
+    class ModelNotFoundError(Exception):
+        status_code = 404
+
+    # First call with primary model throws 404; second call with fallback succeeds
+    mock_choice = MagicMock()
+    mock_choice.message.content = "Here is a calm response from the fallback model."
+    mock_client.chat.completions.create.side_effect = [
+        ModelNotFoundError("models/gemini-2.5-flash-lite not found"),
+        MagicMock(choices=[mock_choice]),
+    ]
+
+    with patch("app.services.companion_engine.get_llm_client_and_model", return_value=(mock_client, "gemini-2.5-flash-lite", "gemini")):
+        payload = {
+            "messages": [{"role": "user", "content": "I am feeling overwhelmed"}],
+            "context": {"level": "High", "score": 70}
+        }
+        response = client.post("/chat/message", json=payload)
+        assert response.status_code == 200
+        data = response.json()
+        assert data["is_fallback"] is False
+        assert "calm response" in data["reply"]
+        # Verify it retried with gemini-1.5-flash
+        assert mock_client.chat.completions.create.call_count == 2
+        second_call_model = mock_client.chat.completions.create.call_args_list[1][1]["model"]
+        assert second_call_model == "gemini-1.5-flash"
+

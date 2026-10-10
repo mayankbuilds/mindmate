@@ -1,6 +1,14 @@
+import os
+import re
 import logging
 from typing import List, Dict, Any, Optional
-from app.core.llm import get_llm_client_and_model, record_llm_success, record_llm_error
+from app.core.llm import (
+    get_llm_client_and_model,
+    record_llm_success,
+    record_llm_error,
+    classify_llm_error,
+    sanitize_message,
+)
 from app.schemas.chat import StudentContext, ChatMessage
 
 logger = logging.getLogger(__name__)
@@ -197,15 +205,41 @@ def generate_companion_reply(messages: List[ChatMessage], context: Optional[Stud
                 "source": "fallback",
                 "is_fallback": True,
                 "provider": "offline-guide",
+                "error_type": "unconfigured_missing_key",
+                "error_message": "LLM client not configured or missing API credentials",
             }
 
-        response = client.chat.completions.create(
-            model=model_name,
-            messages=formatted_messages,
-            max_tokens=250,
-            temperature=0.7,
-            timeout=8.0,
-        )
+        llm_timeout = float(os.getenv("AI_TIMEOUT_SECONDS", "12.0"))
+
+        try:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=formatted_messages,
+                max_tokens=250,
+                temperature=0.7,
+                timeout=llm_timeout,
+            )
+        except Exception as primary_err:
+            classified = classify_llm_error(primary_err)
+            # If the specific model is not found on Google AI Studio, try resilient fallback to gemini-1.5-flash
+            if provider_name == "gemini" and classified == "model_not_found" and model_name != "gemini-1.5-flash":
+                logger.info(
+                    f"[CompanionEngine] Model '{model_name}' was not found. Attempting resilient fallback to 'gemini-1.5-flash'..."
+                )
+                try:
+                    response = client.chat.completions.create(
+                        model="gemini-1.5-flash",
+                        messages=formatted_messages,
+                        max_tokens=250,
+                        temperature=0.7,
+                        timeout=llm_timeout,
+                    )
+                    model_name = "gemini-1.5-flash"
+                except Exception:
+                    raise primary_err
+            else:
+                raise primary_err
+
         reply = response.choices[0].message.content
         if not reply or not reply.strip():
             raise ValueError("Empty response received from LLM provider")
@@ -218,13 +252,18 @@ def generate_companion_reply(messages: List[ChatMessage], context: Optional[Stud
             "provider": provider_name or "llm",
         }
     except Exception as e:
-        record_llm_error(f"{type(e).__name__}: {str(e)}")
-        logger.warning(f"[CompanionEngine] LLM request failed ({type(e).__name__}: {str(e)}). Using offline fallback.")
+        error_type = classify_llm_error(e)
+        sanitized_err = sanitize_message(f"{type(e).__name__}: {str(e)}")
+        record_llm_error(sanitized_err, error_type=error_type)
+        logger.warning(
+            f"[CompanionEngine] LLM request failed ({error_type}): {sanitized_err}. Using offline fallback."
+        )
         raw_fallback = fallback_reply(last_user_msg, stress_level, context)
         return {
             "reply": format_fallback_message(raw_fallback),
             "source": "fallback",
             "is_fallback": True,
             "provider": "offline-guide",
-            "error": str(e),
+            "error_type": error_type,
+            "error_message": sanitized_err,
         }

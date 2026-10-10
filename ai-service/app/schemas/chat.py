@@ -26,3 +26,5 @@ class ChatResponse(BaseModel):
     source: str = "llm"
     is_fallback: bool = False
     provider: Optional[str] = None
+    error_type: Optional[str] = None
+    error_message: Optional[str] = None

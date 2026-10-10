@@ -113,4 +113,28 @@ test("Phase C: AI Companion & Offline Fallback System", async (t) => {
     assert.ok(responseData.reply);
     assert.match(responseData.reply, /Hello! I'm here/i);
   });
+
+  await t.test("6. sendChatMessageToAI logs cold start timeout diagnostics gracefully", async () => {
+    process.env.FASTAPI_SERVICE_URL = "http://10.255.255.1"; // non-routable IP to simulate timeout
+    process.env.FASTAPI_TIMEOUT_MS = "100"; // fast 100ms timeout for test
+
+    const originalWarn = console.warn;
+    let loggedWarning = "";
+    console.warn = (msg) => {
+      loggedWarning += msg;
+    };
+
+    try {
+      const messages = [{ role: "user", content: "Hello" }];
+      const res = await sendChatMessageToAI(messages, { level: "Low" });
+      assert.equal(res.is_fallback, true);
+      assert.match(res.reply, /^\[Offline Support Guide\]/);
+      assert.match(loggedWarning, /\[ChatGateway\]/);
+      assert.match(loggedWarning, /cold_start_timeout|connection_refused/);
+    } finally {
+      console.warn = originalWarn;
+      process.env.FASTAPI_TIMEOUT_MS = "20000";
+    }
+  });
 });
+
