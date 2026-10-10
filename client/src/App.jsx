@@ -29,6 +29,12 @@ const MOODS = [
 const levelOf = (s) => (s < 35 ? "Low" : s < 65 ? "Moderate" : "High");
 const LEVEL_COLOR = { Low: "#3F9E84", Moderate: "#5B6FE8", High: "#D9737D" };
 const LEVEL_SOFT = { Low: "#E2F5EE", Moderate: "#E8EDFF", High: "#FDEBEC" };
+const CLASS_PALETTE = {
+  No: { color: "#3F9E84", bg: "#E2F5EE", label: "No Stress" },
+  Mild: { color: "#5B8DEF", bg: "#E8EDFF", label: "Mild Stress" },
+  Moderate: { color: "#7C6CE6", bg: "#EFEBFF", label: "Moderate Stress" },
+  Severe: { color: "#D9737D", bg: "#FDEBEC", label: "Severe Stress" },
+};
 
 function computeStress(item = {}) {
   let sleep = Number(item.sleep ?? 7.5);
@@ -59,9 +65,9 @@ function computeStress(item = {}) {
 }
 
 const LEVEL_COPY = {
-  Low: "Your recent activity looks balanced. Keep doing what's working, and protect your sleep.",
-  Moderate: "Your recent activity suggests moderate stress. A short break and breathing exercise may help.",
-  High: "Things look heavy right now. Slow down, take a proper break, and consider talking to someone you trust.",
+  Low: "Your recent daily habits look balanced. Keep doing what's working and protect your sleep.",
+  Moderate: "Your recent activity suggests moderate routine load. A short break and breathing exercise may help.",
+  High: "Your habits show high routine strain right now. Slow down, take a proper break, and prioritize rest.",
 };
 
 const RECS = [
@@ -468,31 +474,36 @@ function StressRing({ score, size = 190 }) {
         />
       </svg>
       <div className="ring-c">
-        <div style={{ fontSize: 13, color: "var(--mute)", fontWeight: 600 }}>Stress level</div>
-        <div style={{ fontSize: size > 160 ? 30 : 24, fontWeight: 800, letterSpacing: "-.02em", color }}>{level}</div>
+        <div style={{ fontSize: 12, color: "var(--mute)", fontWeight: 600 }}>Habit Balance</div>
+        <div style={{ fontSize: size > 160 ? 30 : 24, fontWeight: 800, letterSpacing: "-.02em", color }}>
+          {score}<span style={{ fontSize: 14, fontWeight: 600, color: "var(--mute)" }}>/100</span>
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 700, color, marginTop: 2 }}>{level} Load</div>
       </div>
     </div>
   );
 }
 
-function StressCard({ score, compact, title = "Lifestyle Balance Index" }) {
+function StressCard({ score, compact, title = "Lifestyle Habit Index (0–100)" }) {
   const level = levelOf(score);
   return (
     <div className="card" style={{ textAlign: "center" }}>
       <div className="row" style={{ marginBottom: 6 }}>
         <h3 style={{ textAlign: "left" }}>{title}</h3>
         <span className="chip" style={{ fontSize: 12, padding: "2px 8px" }}>
-          Rule-based Index
+          Daily Habits (Rule-based)
         </span>
       </div>
       <StressRing score={score} size={compact ? 170 : 200} />
       <div className="states">
         {["Low", "Moderate", "High"].map((s) => (
-          <div key={s} className="state" style={level === s ? { background: LEVEL_SOFT[s], color: LEVEL_COLOR[s] } : null}>{s}</div>
+          <div key={s} className="state" style={level === s ? { background: LEVEL_SOFT[s], color: LEVEL_COLOR[s] } : null}>
+            {s} Load
+          </div>
         ))}
       </div>
-      <p className="muted" style={{ fontSize: 13, textAlign: "left", lineHeight: 1.4 }}>
-        Calculated from daily sleep, study, screen time, and mood habits. (For ML-powered questionnaire pattern prediction, visit the Assessment tab).
+      <p className="muted" style={{ fontSize: 13, textAlign: "left", lineHeight: 1.4, marginTop: 10 }}>
+        Calculated from daily sleep, study, screen time, and mood logs. Reflects routine load (0–100), not a clinical or ML stress evaluation.
       </p>
     </div>
   );
@@ -680,7 +691,18 @@ function Auth({ mode, go, onDone }) {
 /* App pages                                                           */
 /* ------------------------------------------------------------------ */
 
-function Dashboard({ user, today, score, setTab, setWtab, openSession }) {
+function Dashboard({
+  user,
+  today,
+  score,
+  latestAssessment,
+  loadingAssessment,
+  assessmentError,
+  onRefreshAssessment,
+  setTab,
+  setWtab,
+  openSession,
+}) {
   const h = new Date().getHours();
   const greet = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
   const mood = MOODS.find((m) => m.id === today.mood);
@@ -740,21 +762,159 @@ function Dashboard({ user, today, score, setTab, setWtab, openSession }) {
           </div>
         </div>
         <div className="stack">
-          <StressCard score={score} title="Daily Lifestyle Balance" />
-          <div className="card" style={{ background: "linear-gradient(135deg, #F0F4FF, #F9F5FF)", borderColor: "#DCE5FC" }}>
-            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
-              <div className="tile t-lav" style={{ background: "#fff" }}><Activity size={22} color="var(--lav)" /></div>
-              <div>
-                <h3 style={{ fontSize: 16 }}>ML Stress Assessment</h3>
-                <p className="muted" style={{ fontSize: 13, marginTop: 2 }}>
-                  Evaluate 7 survey indicators using our trained Random Forest classifier.
-                </p>
+          {/* Flow B: Daily Lifestyle Habit Index */}
+          <StressCard score={score} title="Lifestyle Habit Index (0–100)" />
+
+          {/* Flow A: Latest ML Stress Assessment */}
+          {loadingAssessment && !latestAssessment && (
+            <div className="card" style={{ padding: "28px 20px", textAlign: "center" }}>
+              <RefreshCw size={22} className="float" color="var(--lav)" style={{ margin: "0 auto 8px" }} />
+              <div style={{ fontWeight: 600, fontSize: 14 }}>Loading latest ML assessment...</div>
+            </div>
+          )}
+
+          {assessmentError && !latestAssessment && (
+            <div className="card" style={{ background: "#FFF3F4", borderColor: "#F3C4C8", padding: 18 }}>
+              <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+                <AlertCircle size={20} color="#B24853" style={{ flexShrink: 0 }} />
+                <div style={{ flex: 1, fontSize: 13, color: "#B24853", fontWeight: 600 }}>{assessmentError}</div>
+                {onRefreshAssessment && (
+                  <button className="btn btn-s btn-sm" onClick={onRefreshAssessment}>
+                    <RefreshCw size={12} /> Retry
+                  </button>
+                )}
               </div>
             </div>
-            <button className="btn btn-p btn-sm" style={{ marginTop: 14, width: "100%" }} onClick={() => setTab("assessment")}>
-              Take ML Assessment <ArrowRight size={15} />
-            </button>
-          </div>
+          )}
+
+          {!loadingAssessment && !latestAssessment && !assessmentError && (
+            <div className="card" style={{ background: "linear-gradient(135deg, #F0F4FF, #F9F5FF)", borderColor: "#DCE5FC" }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                <div className="tile t-lav" style={{ background: "#fff" }}><Activity size={22} color="var(--lav)" /></div>
+                <div>
+                  <h3 style={{ fontSize: 16 }}>ML Stress Assessment</h3>
+                  <span className="chip" style={{ fontSize: 11, padding: "2px 6px", background: "var(--lav2)", color: "var(--lav)", marginTop: 2 }}>
+                    Random Forest Model
+                  </span>
+                </div>
+              </div>
+              <p className="muted" style={{ fontSize: 13, marginTop: 10, lineHeight: 1.4 }}>
+                No assessment completed yet. Take our 7-indicator questionnaire to evaluate your stress pattern with our verified machine learning pipeline.
+              </p>
+              <button className="btn btn-p btn-sm" style={{ marginTop: 14, width: "100%" }} onClick={() => setTab("assessment")}>
+                Take First ML Assessment <ArrowRight size={15} />
+              </button>
+            </div>
+          )}
+
+          {latestAssessment && (
+            (() => {
+              const cls = latestAssessment.predicted_class || "Moderate";
+              const pal = CLASS_PALETTE[cls] || CLASS_PALETTE.Moderate;
+              const probs = latestAssessment.probabilities || {};
+              const dateStr = latestAssessment.createdAt
+                ? new Date(latestAssessment.createdAt).toLocaleDateString(undefined, {
+                    month: "short",
+                    day: "numeric",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })
+                : "Recent";
+
+              return (
+                <div className="card" style={{ borderColor: "#DCE5FC" }}>
+                  <div className="row" style={{ marginBottom: 10, alignItems: "flex-start" }}>
+                    <div>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <h3 style={{ fontSize: 16 }}>Latest ML Stress Assessment</h3>
+                      </div>
+                      <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                        Assessed on {dateStr}
+                      </div>
+                    </div>
+                    <span
+                      className="chip"
+                      style={{
+                        fontSize: 12,
+                        padding: "3px 10px",
+                        background: pal.bg,
+                        color: pal.color,
+                        fontWeight: 700,
+                      }}
+                    >
+                      <Cpu size={13} style={{ display: "inline", verticalAlign: "middle", marginRight: 4 }} />
+                      {cls} Stress
+                    </span>
+                  </div>
+
+                  <div
+                    style={{
+                      padding: "10px 14px",
+                      borderRadius: 12,
+                      background: pal.bg,
+                      marginBottom: 14,
+                      display: "flex",
+                      justifyContent: "space-between",
+                      alignItems: "center",
+                    }}
+                  >
+                    <div>
+                      <div style={{ fontSize: 11, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.04em", color: pal.color }}>
+                        Model Prediction
+                      </div>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: "var(--ink)", marginTop: 2 }}>
+                        {pal.label}
+                      </div>
+                    </div>
+                    <span className="chip" style={{ background: "#fff", color: pal.color, fontSize: 12, fontWeight: 700 }}>
+                      {probs[cls] != null ? `${Math.round(probs[cls] * 100)}% Match` : "Verified"}
+                    </span>
+                  </div>
+
+                  <div style={{ marginBottom: 12 }}>
+                    <div style={{ fontSize: 12, fontWeight: 600, color: "var(--mute)", marginBottom: 8 }}>
+                      Probability Distribution:
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
+                      {["No", "Mild", "Moderate", "Severe"].map((c) => {
+                        const p = probs[c] != null ? Math.round(probs[c] * 100) : 0;
+                        const cPal = CLASS_PALETTE[c] || CLASS_PALETTE.Moderate;
+                        const isWinner = c === cls;
+                        return (
+                          <div key={c} style={{ background: "#F8FAFF", padding: "6px 8px", borderRadius: 8 }}>
+                            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 11, marginBottom: 3 }}>
+                              <span style={{ fontWeight: isWinner ? 700 : 500, color: isWinner ? cPal.color : "var(--mute)" }}>
+                                {c} {isWinner && "✓"}
+                              </span>
+                              <span style={{ fontWeight: 700 }}>{p}%</span>
+                            </div>
+                            <div style={{ width: "100%", height: 4, background: "#EEF1FA", borderRadius: 999, overflow: "hidden" }}>
+                              <div style={{ width: `${p}%`, height: "100%", background: cPal.color, borderRadius: 999 }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <p className="muted" style={{ fontSize: 12, lineHeight: 1.4, margin: "10px 0 14px" }}>
+                    Evaluated by trained Random Forest pipeline on 7 survey indicators.
+                  </p>
+
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <button className="btn btn-p btn-sm" style={{ flex: 1 }} onClick={() => setTab("assessment")}>
+                      Retake Assessment <ArrowRight size={14} />
+                    </button>
+                    <button className="btn btn-s btn-sm" onClick={() => setTab("history")}>
+                      View History
+                    </button>
+                  </div>
+                </div>
+              );
+            })()
+          )}
+
           <div className="card calm">
             <div className="tile t-lav" style={{ background: "#fff" }}><MessageCircle size={22} /></div>
             <h3 style={{ margin: "14px 0 6px" }}>Need to talk?</h3>
@@ -903,10 +1063,10 @@ function Wellness({ today, setToday, wtab, setWtab, openSession, setTab, resultS
     return (
       <>
         <h1 className="h1">Here's how today looks</h1>
-        <p className="sub">Thanks for checking in. Here is your daily lifestyle balance summary.</p>
+        <p className="sub">Thanks for checking in. Here is your daily lifestyle habit summary.</p>
         {tabs}
         <div className="grid-d">
-          <StressCard score={s} title="Today's Lifestyle Balance" />
+          <StressCard score={s} title="Today's Lifestyle Habit Index" />
           <div className="card">
             <h3>What might help</h3>
             <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
@@ -1008,8 +1168,8 @@ function Wellness({ today, setToday, wtab, setWtab, openSession, setTab, resultS
         <textarea className="inp" style={{ marginTop: 16 }} placeholder="Tell us what's on your mind..." value={d.note} onChange={(e) => setMeta("note")(e.target.value)} aria-label="How are you feeling today?" />
       </div>
       <div style={{ marginTop: 20 }}>
-        <button className="btn btn-p btn-lg" onClick={analyze}>Analyze My Wellness</button>
-        <span className="muted" style={{ fontSize: 13, marginLeft: 14 }}>Lifestyle balance preview: {levelOf(score)}</span>
+        <button className="btn btn-p btn-lg" onClick={analyze}>Save Today's Check-In</button>
+        <span className="muted" style={{ fontSize: 13, marginLeft: 14 }}>Lifestyle habit preview: {levelOf(score)} load</span>
       </div>
     </>
   );
@@ -1175,7 +1335,7 @@ function History({ today, score, onNavigate }) {
           </button>
           <button className={subtab === "lifestyle" ? "on" : ""} onClick={() => setSubtab("lifestyle")}>
             <Leaf size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} />
-            Daily Habits ({checkins.length})
+            Daily Habit Logs ({checkins.length})
           </button>
         </div>
       </div>
@@ -1368,9 +1528,9 @@ function History({ today, score, onNavigate }) {
                   <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
                     <div className="tile" style={{ background: "#fff", color: LEVEL_COLOR[avgLifestyleLevel] }}><Activity size={22} /></div>
                     <div>
-                      <h3>Lifestyle summary ({rows.length} record{rows.length > 1 ? "s" : ""})</h3>
+                      <h3>Lifestyle habit summary ({rows.length} record{rows.length > 1 ? "s" : ""})</h3>
                       <p style={{ marginTop: 2 }}>
-                        Average lifestyle balance index is <strong>{avgLifestyleScore}/100</strong> ({avgLifestyleLevel.toLowerCase()}) across your recorded days.
+                        Average lifestyle habit index is <strong>{avgLifestyleScore}/100</strong> ({avgLifestyleLevel.toLowerCase()} load) across your recorded days.
                       </p>
                     </div>
                   </div>
@@ -1378,7 +1538,7 @@ function History({ today, score, onNavigate }) {
               )}
 
               <div className="card sect">
-                <h3>Daily Lifestyle Balance Index Trend</h3>
+                <h3>Daily Lifestyle Habit Index Trend (0–100)</h3>
                 <div style={{ height: 240, marginTop: 16 }}>
                   <ResponsiveContainer>
                     <AreaChart data={rows} margin={{ left: -20, right: 8, top: 8 }}>
@@ -1391,7 +1551,7 @@ function History({ today, score, onNavigate }) {
                       <CartesianGrid vertical={false} stroke="#EEF1FA" />
                       <XAxis dataKey="day" {...axis} />
                       <YAxis domain={[0, 100]} ticks={[0, 35, 65, 100]} {...axis} />
-                      <Tooltip contentStyle={tipStyle} formatter={(v) => [`${v}/100 (${levelOf(v)})`, "Lifestyle Index"]} />
+                      <Tooltip contentStyle={tipStyle} formatter={(v) => [`${v}/100 (${levelOf(v)} load)`, "Lifestyle Habit Index"]} />
                       <Area type="monotone" dataKey="stress" stroke="#6C5CE0" strokeWidth={3} fill="url(#sg)" />
                     </AreaChart>
                   </ResponsiveContainer>
@@ -1945,6 +2105,29 @@ export default function MindMate() {
   const [autoNotify, setAutoNotify] = useState(true);
   const [prefs, setPrefs] = useState({ daily: true, tips: true, alerts: true });
 
+  // Latest ML assessment state for Dashboard & App synchronization
+  const [latestAssessment, setLatestAssessment] = useState(null);
+  const [loadingAssessment, setLoadingAssessment] = useState(true);
+  const [assessmentError, setAssessmentError] = useState(null);
+
+  const loadLatestAssessment = async () => {
+    setLoadingAssessment(true);
+    setAssessmentError(null);
+    try {
+      const history = await api.getAssessmentHistory();
+      if (Array.isArray(history) && history.length > 0) {
+        setLatestAssessment(history[0]);
+      } else {
+        setLatestAssessment(null);
+      }
+    } catch (err) {
+      console.warn("Failed to load latest assessment:", err);
+      setAssessmentError(err.message || "Failed to load latest assessment");
+    } finally {
+      setLoadingAssessment(false);
+    }
+  };
+
   // YouTube / browser style navigation stack
   const [historyStack, setHistoryStack] = useState(["dashboard"]);
   const [historyIndex, setHistoryIndex] = useState(0);
@@ -2057,10 +2240,22 @@ export default function MindMate() {
 
   useEffect(() => {
     const token = localStorage.getItem("mm_token");
-    if (!token) return;
+    if (!token) {
+      setLoadingAssessment(false);
+      return;
+    }
 
-    Promise.all([api.getProfile(), api.getToday(), api.getContacts()])
-      .then(([userData, todayData, contactList]) => {
+    Promise.all([
+      api.getProfile(),
+      api.getToday(),
+      api.getContacts(),
+      api.getAssessmentHistory().catch((err) => {
+        console.warn("Failed to load assessments on mount:", err);
+        setAssessmentError(err.message || "Failed to load latest assessment");
+        return null;
+      }),
+    ])
+      .then(([userData, todayData, contactList, assessmentsData]) => {
         if (userData && userData.name) {
           setUser(userData);
           if (typeof userData.autoNotify === "boolean") setAutoNotify(userData.autoNotify);
@@ -2071,10 +2266,20 @@ export default function MindMate() {
         if (Array.isArray(contactList)) {
           setContacts(contactList);
         }
+        if (Array.isArray(assessmentsData) && assessmentsData.length > 0) {
+          setLatestAssessment(assessmentsData[0]);
+          setAssessmentError(null);
+        } else if (Array.isArray(assessmentsData)) {
+          setLatestAssessment(null);
+          setAssessmentError(null);
+        }
         setScreen("app");
       })
       .catch((err) => {
         console.warn("Session verification:", err);
+      })
+      .finally(() => {
+        setLoadingAssessment(false);
       });
   }, []);
 
@@ -2086,11 +2291,17 @@ export default function MindMate() {
     api.getContacts().then((list) => {
       if (Array.isArray(list)) setContacts(list);
     }).catch(() => {});
+    api.getToday().then((todayData) => {
+      if (todayData && todayData.date) setToday({ ...todayData, done: true });
+    }).catch(() => {});
+    loadLatestAssessment();
   };
   const logout = () => {
     localStorage.removeItem("mm_token");
     setContacts([]);
     setUser({ name: "", email: "", college: "", avatar: "" });
+    setLatestAssessment(null);
+    setAssessmentError(null);
     setMenu(false);
     setScreen("landing");
   };
@@ -2172,12 +2383,27 @@ export default function MindMate() {
           </header>
           <main className="page">
             <ErrorBoundary inline>
-              {tab === "dashboard" && <Dashboard user={user} today={today} score={score} setTab={navigateTo} setWtab={setWtab} openSession={setSession} />}
+              {tab === "dashboard" && (
+                <Dashboard
+                  user={user}
+                  today={today}
+                  score={score}
+                  latestAssessment={latestAssessment}
+                  loadingAssessment={loadingAssessment}
+                  assessmentError={assessmentError}
+                  onRefreshAssessment={loadLatestAssessment}
+                  setTab={navigateTo}
+                  setWtab={setWtab}
+                  openSession={setSession}
+                />
+              )}
               {tab === "wellness" && <Wellness key={String(today.done)} today={today} setToday={setToday} wtab={wtab} setWtab={setWtab} openSession={setSession} setTab={navigateTo} resultShown={resultShown} setResultShown={setResultShown} />}
               {tab === "assessment" && (
                 <Assessment
                   onComplete={(res) => {
                     toast(`Assessment complete: ${res.predicted_class} stress predicted.`);
+                    setLatestAssessment(res);
+                    setAssessmentError(null);
                   }}
                   onViewHistory={() => navigateTo("history")}
                   onTalkToAi={() => navigateTo("ai")}
