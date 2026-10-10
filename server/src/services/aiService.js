@@ -1,6 +1,6 @@
 const axios = require("axios");
 
-const FASTAPI_URL = process.env.FASTAPI_SERVICE_URL || "http://localhost:8000";
+const getFastApiUrl = () => process.env.FASTAPI_SERVICE_URL || "http://localhost:8000";
 
 const CALMFLOW_SYSTEM_PROMPT = `You are "CalmFlow", an empathetic, grounded, and supportive wellness companion inside a Stress Prediction and Tracking platform.
 
@@ -88,7 +88,88 @@ const LOCAL_RECS = [
   { id: "focus", title: "Try a focused study session", blurb: "25 minutes on one topic, then a real break. Small blocks beat marathons.", mins: 25, secs: 1500, tint: "green" },
 ];
 
-const computeLocalStress = (item = {}) => {
+/**
+ * Flow A: Request ML questionnaire stress prediction from FastAPI ML service.
+ * Endpoint: POST /assessment/predict
+ *
+ * CRITICAL ARCHITECTURAL GUARANTEE:
+ * This function NEVER invokes any handcrafted fallback formula or fake ML computation.
+ * If the ML service is down, times out, returns an error, or provides an invalid payload,
+ * this function throws an error with the appropriate HTTP status code (503 / 502)
+ * so the gateway can fail cleanly and transparently without deceiving the user.
+ */
+const requestAssessmentPrediction = async (payload) => {
+  try {
+    const response = await axios.post(`${getFastApiUrl()}/assessment/predict`, payload, {
+      timeout: 6000,
+      headers: { "Content-Type": "application/json" },
+    });
+
+    if (
+      !response.data ||
+      typeof response.data !== "object" ||
+      !response.data.predicted_class ||
+      response.data.class_index === undefined ||
+      !response.data.probabilities
+    ) {
+      const err = new Error("Malformed response received from ML inference service");
+      err.status = 502;
+      err.isGatewayCustom = true;
+      throw err;
+    }
+
+    return response.data;
+  } catch (error) {
+    if (error.isGatewayCustom) {
+      throw error;
+    }
+
+    // Upstream response from FastAPI
+    if (error.response) {
+      const upstreamStatus = error.response.status;
+      let upstreamDetail = null;
+      if (error.response.data && typeof error.response.data === "object") {
+        upstreamDetail = error.response.data.detail || error.response.data.message;
+      } else if (typeof error.response.data === "string") {
+        try {
+          const parsed = JSON.parse(error.response.data);
+          upstreamDetail = parsed.detail || parsed.message;
+        } catch (_) {
+          if (error.response.data.trim()) {
+            upstreamDetail = error.response.data.trim();
+          }
+        }
+      }
+
+      const err = new Error(
+        upstreamDetail || `ML inference service responded with status ${upstreamStatus}`
+      );
+      err.status = upstreamStatus >= 500 ? upstreamStatus : 503;
+      throw err;
+    }
+
+    // Network / connection errors
+    let message = "ML inference service is temporarily unavailable";
+    if (error.code === "ECONNREFUSED") {
+      message = "ML inference service is not reachable (connection refused)";
+    } else if (error.code === "ETIMEDOUT" || error.code === "ECONNABORTED") {
+      message = "ML inference service request timed out";
+    } else if (error.code === "ENOTFOUND") {
+      message = "ML inference service host could not be resolved";
+    }
+
+    const err = new Error(message);
+    err.status = 503;
+    throw err;
+  }
+};
+
+/**
+ * Flow B: Transparent rule-based lifestyle habit index calculation (sleep, study, screen, exam, mood, note).
+ * NOTE: This is a deterministic heuristic lifestyle tracker and is NOT a machine learning model.
+ * It is solely used for Flow B daily check-ins (/api/wellness/checkin).
+ */
+const computeLocalLifestyleIndex = (item = {}) => {
   let sleep = Number(item.sleep ?? 7.5);
   let study = Number(item.study ?? 6.0);
   let screen = Number(item.screen ?? 4.5);
@@ -126,16 +207,23 @@ const computeLocalStress = (item = {}) => {
   return { score, level, recommendations };
 };
 
+// Backward-compatible alias for existing callers
+const computeLocalStress = computeLocalLifestyleIndex;
+
+/**
+ * Flow B: Request lifestyle score from FastAPI /wellness/compute-stress or fall back
+ * to local transparent rule-based lifestyle calculation.
+ */
 const computeStressWithAI = async (data) => {
   try {
-    const response = await axios.post(`${FASTAPI_URL}/wellness/compute-stress`, data, { timeout: 6000 });
+    const response = await axios.post(`${getFastApiUrl()}/wellness/compute-stress`, data, { timeout: 6000 });
     if (response.data && response.data.score != null) {
       return response.data;
     }
   } catch (error) {
     // Local calculation fallback if FastAPI service is temporarily offline or not deployed
   }
-  return computeLocalStress(data);
+  return computeLocalLifestyleIndex(data);
 };
 
 const callGeminiDirectly = async (messages, context = {}) => {
@@ -182,7 +270,7 @@ const sendChatMessageToAI = async (messages, context = {}) => {
   // Tier 1: Try FastAPI AI service (which may have Groq/Qwen or Gemini configured)
   try {
     const response = await axios.post(
-      `${FASTAPI_URL}/chat/message`,
+      `${getFastApiUrl()}/chat/message`,
       { messages, context },
       { timeout: 7000 }
     );
@@ -211,7 +299,10 @@ const sendChatMessageToAI = async (messages, context = {}) => {
 };
 
 module.exports = {
+  requestAssessmentPrediction,
   computeStressWithAI,
+  computeLocalLifestyleIndex,
+  computeLocalStress,
   sendChatMessageToAI,
   getFallbackReply,
   CALMFLOW_SYSTEM_PROMPT,

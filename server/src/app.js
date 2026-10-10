@@ -5,6 +5,7 @@ const fs = require("fs");
 
 const authRoutes = require("./routes/authRoutes");
 const wellnessRoutes = require("./routes/wellnessRoutes");
+const assessmentRoutes = require("./routes/assessmentRoutes");
 const contactRoutes = require("./routes/contactRoutes");
 const chatRoutes = require("./routes/chatRoutes");
 const { notFound, errorHandler } = require("./middleware/errorMiddleware");
@@ -18,6 +19,7 @@ app.use(express.urlencoded({ extended: true, limit: "5mb" }));
 // API endpoints
 app.use("/api/auth", authRoutes);
 app.use("/api/wellness", wellnessRoutes);
+app.use("/api/assessment", assessmentRoutes);
 app.use("/api/contacts", contactRoutes);
 app.use("/api/chat", chatRoutes);
 
