@@ -1,12 +1,13 @@
 import { api } from "./services/api";
 import { useState, useEffect, useMemo, useRef } from "react";
 import ErrorBoundary from "./components/ErrorBoundary";
+import Assessment from "./components/Assessment";
 import {
   Home, Leaf, MessageCircle, BarChart3, User, LifeBuoy, Bell, Moon, BookOpen,
   Smartphone, CalendarDays, Wind, Footprints, Send, Plus, Phone, Mail, Check,
   X, LogOut, ShieldCheck, Activity, Eye, EyeOff, ArrowRight, Trash2, Timer,
   Sparkles, ChevronDown, HeartHandshake, ChevronLeft, ChevronRight, RefreshCw,
-  Smile, Meh, Frown, AlertCircle, Compass, Camera,
+  Smile, Meh, Frown, AlertCircle, Compass, Camera, Cpu,
 } from "lucide-react";
 import {
   ResponsiveContainer, AreaChart, Area, BarChart, Bar, LineChart, Line,
@@ -474,18 +475,25 @@ function StressRing({ score, size = 190 }) {
   );
 }
 
-function StressCard({ score, compact }) {
+function StressCard({ score, compact, title = "Lifestyle Balance Index" }) {
   const level = levelOf(score);
   return (
     <div className="card" style={{ textAlign: "center" }}>
-      <h3 style={{ textAlign: "left" }}>Current stress level</h3>
+      <div className="row" style={{ marginBottom: 6 }}>
+        <h3 style={{ textAlign: "left" }}>{title}</h3>
+        <span className="chip" style={{ fontSize: 12, padding: "2px 8px" }}>
+          Rule-based Index
+        </span>
+      </div>
       <StressRing score={score} size={compact ? 170 : 200} />
       <div className="states">
         {["Low", "Moderate", "High"].map((s) => (
           <div key={s} className="state" style={level === s ? { background: LEVEL_SOFT[s], color: LEVEL_COLOR[s] } : null}>{s}</div>
         ))}
       </div>
-      <p className="muted" style={{ fontSize: 14, textAlign: "left" }}>{LEVEL_COPY[level]}</p>
+      <p className="muted" style={{ fontSize: 13, textAlign: "left", lineHeight: 1.4 }}>
+        Calculated from daily sleep, study, screen time, and mood habits. (For ML-powered questionnaire pattern prediction, visit the Assessment tab).
+      </p>
     </div>
   );
 }
@@ -732,7 +740,21 @@ function Dashboard({ user, today, score, setTab, setWtab, openSession }) {
           </div>
         </div>
         <div className="stack">
-          <StressCard score={score} />
+          <StressCard score={score} title="Daily Lifestyle Balance" />
+          <div className="card" style={{ background: "linear-gradient(135deg, #F0F4FF, #F9F5FF)", borderColor: "#DCE5FC" }}>
+            <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+              <div className="tile t-lav" style={{ background: "#fff" }}><Activity size={22} color="var(--lav)" /></div>
+              <div>
+                <h3 style={{ fontSize: 16 }}>ML Stress Assessment</h3>
+                <p className="muted" style={{ fontSize: 13, marginTop: 2 }}>
+                  Evaluate 7 survey indicators using our trained Random Forest classifier.
+                </p>
+              </div>
+            </div>
+            <button className="btn btn-p btn-sm" style={{ marginTop: 14, width: "100%" }} onClick={() => setTab("assessment")}>
+              Take ML Assessment <ArrowRight size={15} />
+            </button>
+          </div>
           <div className="card calm">
             <div className="tile t-lav" style={{ background: "#fff" }}><MessageCircle size={22} /></div>
             <h3 style={{ margin: "14px 0 6px" }}>Need to talk?</h3>
@@ -877,14 +899,14 @@ function Wellness({ today, setToday, wtab, setWtab, openSession, setTab, resultS
   }
 
   if (resultShown) {
-    const s = computeStress(today);
+    const s = today?.stressScore != null ? today.stressScore : computeStress(today);
     return (
       <>
         <h1 className="h1">Here's how today looks</h1>
-        <p className="sub">Thanks for checking in. Here's what we noticed.</p>
+        <p className="sub">Thanks for checking in. Here is your daily lifestyle balance summary.</p>
         {tabs}
         <div className="grid-d">
-          <StressCard score={s} />
+          <StressCard score={s} title="Today's Lifestyle Balance" />
           <div className="card">
             <h3>What might help</h3>
             <div style={{ display: "grid", gap: 10, marginTop: 16 }}>
@@ -987,7 +1009,7 @@ function Wellness({ today, setToday, wtab, setWtab, openSession, setTab, resultS
       </div>
       <div style={{ marginTop: 20 }}>
         <button className="btn btn-p btn-lg" onClick={analyze}>Analyze My Wellness</button>
-        <span className="muted" style={{ fontSize: 13, marginLeft: 14 }}>Preview: {levelOf(score)}</span>
+        <span className="muted" style={{ fontSize: 13, marginLeft: 14 }}>Lifestyle balance preview: {levelOf(score)}</span>
       </div>
     </>
   );
@@ -1054,78 +1076,360 @@ function Chat({ ctx }) {
 const tipStyle = { borderRadius: 12, border: "1px solid #E4E8F6", boxShadow: "0 8px 24px rgba(60,80,160,.12)", fontFamily: "inherit", fontSize: 13 };
 const axis = { tick: { fill: "#6B789E", fontSize: 12 }, axisLine: false, tickLine: false };
 
-function History({ today, score }) {
-  const labels = useMemo(() => {
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - (6 - i));
-      return d.toLocaleDateString("en-US", { weekday: "short" });
-    });
+function History({ today, score, onNavigate }) {
+  const [subtab, setSubtab] = useState("assessments"); // "assessments" | "lifestyle"
+  
+  // Flow A: ML Assessment History state
+  const [assessments, setAssessments] = useState([]);
+  const [loadingAssessments, setLoadingAssessments] = useState(true);
+  const [assessmentsError, setAssessmentsError] = useState(null);
+  const [expandedId, setExpandedId] = useState(null);
+
+  // Flow B: Daily Lifestyle History state
+  const [checkins, setCheckins] = useState([]);
+  const [loadingCheckins, setLoadingCheckins] = useState(true);
+  const [checkinsError, setCheckinsError] = useState(null);
+
+  const fetchAssessments = async () => {
+    setLoadingAssessments(true);
+    setAssessmentsError(null);
+    try {
+      const data = await api.getAssessmentHistory();
+      setAssessments(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setAssessmentsError(err.message || "Failed to load assessment history");
+    } finally {
+      setLoadingAssessments(false);
+    }
+  };
+
+  const fetchCheckins = async () => {
+    setLoadingCheckins(true);
+    setCheckinsError(null);
+    try {
+      const data = await api.getHistory();
+      setCheckins(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setCheckinsError(err.message || "Failed to load lifestyle check-in history");
+    } finally {
+      setLoadingCheckins(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchAssessments();
+    fetchCheckins();
   }, []);
-  const rows = labels.map((day, i) => ({
-    day,
-    stress: [58, 62, 55, 60, 48, 44, score][i],
-    sleep: [6.4, 6.8, 6.1, 7.0, 8.1, 7.6, today.sleep][i],
-    study: [5, 6.5, 7, 5.5, 3, 4, today.study][i],
-    screen: [6.5, 5.8, 7.2, 6, 4.8, 5.2, today.screen][i],
-  }));
-  const avg = Math.round(rows.reduce((a, r) => a + r.stress, 0) / 7);
-  const lvl = levelOf(avg);
+
+  const CLASS_PALETTE = {
+    No: { color: "#3F9E84", bg: "#E2F5EE", label: "No Stress" },
+    Mild: { color: "#5B8DEF", bg: "#E8EDFF", label: "Mild Stress" },
+    Moderate: { color: "#7C6CE6", bg: "#EFEBFF", label: "Moderate Stress" },
+    Severe: { color: "#D9737D", bg: "#FDEBEC", label: "Severe Stress" },
+  };
+
+  const QUESTIONNAIRE_TITLES = {
+    nervousness: "Nervousness",
+    unable_to_control: "Loss of Control",
+    worry: "Excessive Worry",
+    trouble_relaxation: "Trouble Relaxing",
+    restlessness: "Restlessness",
+    irritability: "Irritability",
+    fear: "Anticipatory Fear",
+  };
+
+  const RATING_NAMES = ["No (0)", "Mild (1)", "Moderate (2)", "Severe (3)"];
+
+  // Real lifestyle rows for charts
+  const rows = useMemo(() => {
+    return checkins.map((item) => ({
+      day: item.date ? new Date(item.date).toLocaleDateString("en-US", { weekday: "short", month: "numeric", day: "numeric" }) : "Day",
+      stress: item.stressScore,
+      sleep: item.sleep,
+      study: item.study,
+      screen: item.screen,
+      mood: item.mood,
+    }));
+  }, [checkins]);
+
+  const avgLifestyleScore = rows.length > 0 ? Math.round(rows.reduce((a, r) => a + r.stress, 0) / rows.length) : null;
+  const avgLifestyleLevel = avgLifestyleScore != null ? levelOf(avgLifestyleScore) : null;
+
   const charts = [
     { t: "Sleep", u: "hrs", k: "sleep", color: "#7C6CE6", kind: "bar" },
     { t: "Study", u: "hrs", k: "study", color: "#5B8DEF", kind: "bar" },
     { t: "Screen time", u: "hrs", k: "screen", color: "#3F9E84", kind: "line" },
   ];
+
   return (
     <>
-      <h1 className="h1">Your week</h1>
-      <p className="sub">A simple look at how the last 7 days have gone.</p>
-      <div className="card sect" style={{ background: LEVEL_SOFT[lvl], border: 0, marginTop: 24 }}>
-        <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
-          <div className="tile" style={{ background: "#fff", color: LEVEL_COLOR[lvl] }}><Activity size={22} /></div>
-          <div><h3>Weekly summary</h3><p style={{ marginTop: 2 }}>Your stress level has been {lvl.toLowerCase()} this week.</p></div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h1 className="h1">History & Trends</h1>
+          <p className="sub">Real records of your ML stress assessments and daily habit logs.</p>
+        </div>
+        <div className="seg" role="tablist" style={{ marginTop: 0 }}>
+          <button className={subtab === "assessments" ? "on" : ""} onClick={() => setSubtab("assessments")}>
+            <Cpu size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} />
+            ML Assessments ({assessments.length})
+          </button>
+          <button className={subtab === "lifestyle" ? "on" : ""} onClick={() => setSubtab("lifestyle")}>
+            <Leaf size={14} style={{ display: "inline", verticalAlign: "middle", marginRight: 6 }} />
+            Daily Habits ({checkins.length})
+          </button>
         </div>
       </div>
-      <div className="card sect">
-        <h3>Stress level, last 7 days</h3>
-        <div style={{ height: 240, marginTop: 16 }}>
-          <ResponsiveContainer>
-            <AreaChart data={rows} margin={{ left: -20, right: 8, top: 8 }}>
-              <defs><linearGradient id="sg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#7C6CE6" stopOpacity=".3" /><stop offset="1" stopColor="#7C6CE6" stopOpacity="0" /></linearGradient></defs>
-              <CartesianGrid vertical={false} stroke="#EEF1FA" />
-              <XAxis dataKey="day" {...axis} /><YAxis domain={[0, 100]} ticks={[0, 35, 65, 100]} {...axis} />
-              <Tooltip contentStyle={tipStyle} formatter={(v) => [`${v} (${levelOf(v)})`, "Stress"]} />
-              <Area type="monotone" dataKey="stress" stroke="#6C5CE0" strokeWidth={3} fill="url(#sg)" />
-            </AreaChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-      <div className="recgrid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))" }}>
-        {charts.map((c) => (
-          <div className="card" key={c.k}>
-            <h3>{c.t}</h3>
-            <div style={{ height: 170, marginTop: 12 }}>
-              <ResponsiveContainer>
-                {c.kind === "bar" ? (
-                  <BarChart data={rows} margin={{ left: -26, right: 4 }}>
-                    <CartesianGrid vertical={false} stroke="#EEF1FA" />
-                    <XAxis dataKey="day" {...axis} /><YAxis {...axis} />
-                    <Tooltip contentStyle={tipStyle} cursor={{ fill: "#F3F6FF" }} formatter={(v) => [`${v} ${c.u}`, c.t]} />
-                    <Bar dataKey={c.k} fill={c.color} radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                ) : (
-                  <LineChart data={rows} margin={{ left: -26, right: 8, top: 6 }}>
-                    <CartesianGrid vertical={false} stroke="#EEF1FA" />
-                    <XAxis dataKey="day" {...axis} /><YAxis {...axis} />
-                    <Tooltip contentStyle={tipStyle} formatter={(v) => [`${v} ${c.u}`, c.t]} />
-                    <Line type="monotone" dataKey={c.k} stroke={c.color} strokeWidth={3} dot={{ r: 4, fill: c.color, strokeWidth: 0 }} />
-                  </LineChart>
-                )}
-              </ResponsiveContainer>
+
+      {/* ------------------------------------------------------------- */}
+      {/* FLOW A: ML Assessment History                                 */}
+      {/* ------------------------------------------------------------- */}
+      {subtab === "assessments" && (
+        <div style={{ marginTop: 24, display: "grid", gap: 16 }}>
+          {loadingAssessments && (
+            <div className="card" style={{ textAlign: "center", padding: "48px 20px" }}>
+              <RefreshCw size={24} className="float" color="var(--lav)" style={{ margin: "0 auto 12px" }} />
+              <div style={{ fontWeight: 600 }}>Loading ML assessment history...</div>
             </div>
-          </div>
-        ))}
-      </div>
+          )}
+
+          {assessmentsError && (
+            <div className="card" style={{ background: "#FFF3F4", borderColor: "#F3C4C8", padding: 20 }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                <AlertCircle size={22} color="#B24853" />
+                <div style={{ flex: 1, color: "#B24853", fontWeight: 600 }}>{assessmentsError}</div>
+                <button className="btn btn-s btn-sm" onClick={fetchAssessments}>
+                  <RefreshCw size={14} /> Retry
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!loadingAssessments && !assessmentsError && assessments.length === 0 && (
+            <div className="card" style={{ textAlign: "center", padding: "48px 20px" }}>
+              <div className="tile t-lav" style={{ margin: "0 auto 16px" }}><Activity size={24} /></div>
+              <h3>No ML Assessments Yet</h3>
+              <p className="muted" style={{ maxWidth: 440, margin: "8px auto 22px", fontSize: 14 }}>
+                You have not completed any questionnaire assessments yet. Take a 2-minute assessment to evaluate your stress pattern with our trained model.
+              </p>
+              {onNavigate && (
+                <button className="btn btn-p" onClick={() => onNavigate("assessment")}>
+                  Take First ML Assessment <ArrowRight size={16} />
+                </button>
+              )}
+            </div>
+          )}
+
+          {!loadingAssessments && !assessmentsError && assessments.length > 0 && (
+            <>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                <span className="muted" style={{ fontSize: 14 }}>
+                  Showing {assessments.length} genuine model prediction{assessments.length > 1 ? "s" : ""}
+                </span>
+                {onNavigate && (
+                  <button className="linkb" onClick={() => onNavigate("assessment")}>
+                    + Take new assessment
+                  </button>
+                )}
+              </div>
+
+              {assessments.map((a, idx) => {
+                const cls = a.predicted_class || "Moderate";
+                const pal = CLASS_PALETTE[cls] || CLASS_PALETTE.Moderate;
+                const probs = a.probabilities || {};
+                const isExpanded = expandedId === a._id;
+                const formattedDate = a.createdAt
+                  ? new Date(a.createdAt).toLocaleString(undefined, {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })
+                  : `Assessment #${idx + 1}`;
+
+                return (
+                  <div key={a._id || idx} className="card" style={{ borderLeft: `5px solid ${pal.color}`, padding: "20px 24px" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 10 }}>
+                      <div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <span className="chip" style={{ background: pal.bg, color: pal.color, fontWeight: 700, fontSize: 14 }}>
+                            {cls} Stress
+                          </span>
+                          <span className="muted" style={{ fontSize: 13 }}>{formattedDate}</span>
+                        </div>
+                        <div className="muted" style={{ fontSize: 12, marginTop: 6 }}>
+                          Model: {a.model_version || "RandomForest_MultiTier_v1"}
+                        </div>
+                      </div>
+
+                      <button
+                        className="btn btn-s btn-sm"
+                        onClick={() => setExpandedId(isExpanded ? null : a._id)}
+                        style={{ fontSize: 13 }}
+                      >
+                        {isExpanded ? "Hide Questionnaire" : "View Answers"}
+                        <ChevronDown size={14} style={{ transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
+                      </button>
+                    </div>
+
+                    {/* Class probabilities breakdown */}
+                    <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
+                      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(110px, 1fr))", gap: 10 }}>
+                        {["No", "Mild", "Moderate", "Severe"].map((c) => {
+                          const p = probs[c] != null ? Math.round(probs[c] * 100) : 0;
+                          const cPal = CLASS_PALETTE[c] || CLASS_PALETTE.Moderate;
+                          const isLead = c === cls;
+                          return (
+                            <div key={c} style={{ background: "#F8FAFF", padding: "8px 10px", borderRadius: 10 }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 4 }}>
+                                <span style={{ fontWeight: isLead ? 700 : 500, color: isLead ? cPal.color : "var(--mute)" }}>{c}</span>
+                                <span style={{ fontWeight: 700 }}>{p}%</span>
+                              </div>
+                              <div style={{ width: "100%", height: 5, background: "#EEF1FA", borderRadius: 999, overflow: "hidden" }}>
+                                <div style={{ width: `${p}%`, height: "100%", background: cPal.color, borderRadius: 999 }} />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Expandable answers detail */}
+                    {isExpanded && a.responses && (
+                      <div style={{ marginTop: 16, paddingTop: 14, borderTop: "1px dashed var(--line)" }}>
+                        <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 10, color: "var(--ink)" }}>
+                          Questionnaire Responses:
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 8 }}>
+                          {Object.entries(QUESTIONNAIRE_TITLES).map(([k, lbl]) => {
+                            const val = a.responses[k];
+                            return (
+                              <div key={k} style={{ fontSize: 12, padding: "6px 10px", borderRadius: 8, background: "#F6F8FF" }}>
+                                <span className="muted">{lbl}: </span>
+                                <strong style={{ color: "var(--ink)" }}>{val != null ? RATING_NAMES[val] || val : "N/A"}</strong>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* FLOW B: Daily Lifestyle History                               */}
+      {/* ------------------------------------------------------------- */}
+      {subtab === "lifestyle" && (
+        <div style={{ marginTop: 24, display: "grid", gap: 18 }}>
+          {loadingCheckins && (
+            <div className="card" style={{ textAlign: "center", padding: "48px 20px" }}>
+              <RefreshCw size={24} className="float" color="var(--grn)" style={{ margin: "0 auto 12px" }} />
+              <div style={{ fontWeight: 600 }}>Loading lifestyle history...</div>
+            </div>
+          )}
+
+          {checkinsError && (
+            <div className="card" style={{ background: "#FFF3F4", borderColor: "#F3C4C8", padding: 20 }}>
+              <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
+                <AlertCircle size={22} color="#B24853" />
+                <div style={{ flex: 1, color: "#B24853", fontWeight: 600 }}>{checkinsError}</div>
+                <button className="btn btn-s btn-sm" onClick={fetchCheckins}>
+                  <RefreshCw size={14} /> Retry
+                </button>
+              </div>
+            </div>
+          )}
+
+          {!loadingCheckins && !checkinsError && checkins.length === 0 && (
+            <div className="card" style={{ textAlign: "center", padding: "48px 20px" }}>
+              <div className="tile t-green" style={{ margin: "0 auto 16px" }}><Leaf size={24} /></div>
+              <h3>No Daily Check-ins Yet</h3>
+              <p className="muted" style={{ maxWidth: 440, margin: "8px auto 22px", fontSize: 14 }}>
+                Log your sleep hours, study time, screen exposure, and mood in the Wellness tab to build a real timeline of your daily balance.
+              </p>
+              {onNavigate && (
+                <button className="btn btn-p" onClick={() => onNavigate("wellness")}>
+                  Complete Today's Check-in <ArrowRight size={16} />
+                </button>
+              )}
+            </div>
+          )}
+
+          {!loadingCheckins && !checkinsError && checkins.length > 0 && (
+            <>
+              {avgLifestyleLevel && (
+                <div className="card sect" style={{ background: LEVEL_SOFT[avgLifestyleLevel], border: 0 }}>
+                  <div style={{ display: "flex", gap: 14, alignItems: "center" }}>
+                    <div className="tile" style={{ background: "#fff", color: LEVEL_COLOR[avgLifestyleLevel] }}><Activity size={22} /></div>
+                    <div>
+                      <h3>Lifestyle summary ({rows.length} record{rows.length > 1 ? "s" : ""})</h3>
+                      <p style={{ marginTop: 2 }}>
+                        Average lifestyle balance index is <strong>{avgLifestyleScore}/100</strong> ({avgLifestyleLevel.toLowerCase()}) across your recorded days.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div className="card sect">
+                <h3>Daily Lifestyle Balance Index Trend</h3>
+                <div style={{ height: 240, marginTop: 16 }}>
+                  <ResponsiveContainer>
+                    <AreaChart data={rows} margin={{ left: -20, right: 8, top: 8 }}>
+                      <defs>
+                        <linearGradient id="sg" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0" stopColor="#7C6CE6" stopOpacity=".3" />
+                          <stop offset="1" stopColor="#7C6CE6" stopOpacity="0" />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid vertical={false} stroke="#EEF1FA" />
+                      <XAxis dataKey="day" {...axis} />
+                      <YAxis domain={[0, 100]} ticks={[0, 35, 65, 100]} {...axis} />
+                      <Tooltip contentStyle={tipStyle} formatter={(v) => [`${v}/100 (${levelOf(v)})`, "Lifestyle Index"]} />
+                      <Area type="monotone" dataKey="stress" stroke="#6C5CE0" strokeWidth={3} fill="url(#sg)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              <div className="recgrid" style={{ gridTemplateColumns: "repeat(auto-fit,minmax(280px,1fr))" }}>
+                {charts.map((c) => (
+                  <div className="card" key={c.k}>
+                    <h3>{c.t}</h3>
+                    <div style={{ height: 170, marginTop: 12 }}>
+                      <ResponsiveContainer>
+                        {c.kind === "bar" ? (
+                          <BarChart data={rows} margin={{ left: -26, right: 4 }}>
+                            <CartesianGrid vertical={false} stroke="#EEF1FA" />
+                            <XAxis dataKey="day" {...axis} />
+                            <YAxis {...axis} />
+                            <Tooltip contentStyle={tipStyle} cursor={{ fill: "#F3F6FF" }} formatter={(v) => [`${v} ${c.u}`, c.t]} />
+                            <Bar dataKey={c.k} fill={c.color} radius={[8, 8, 0, 0]} />
+                          </BarChart>
+                        ) : (
+                          <LineChart data={rows} margin={{ left: -26, right: 8, top: 6 }}>
+                            <CartesianGrid vertical={false} stroke="#EEF1FA" />
+                            <XAxis dataKey="day" {...axis} />
+                            <YAxis {...axis} />
+                            <Tooltip contentStyle={tipStyle} formatter={(v) => [`${v} ${c.u}`, c.t]} />
+                            <Line type="monotone" dataKey={c.k} stroke={c.color} strokeWidth={3} dot={{ r: 4, fill: c.color, strokeWidth: 0 }} />
+                          </LineChart>
+                        )}
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
+        </div>
+      )}
     </>
   );
 }
@@ -1794,11 +2098,20 @@ export default function MindMate() {
   const NAV = [
     { id: "dashboard", label: "Dashboard", short: "Home", icon: Home },
     { id: "wellness", label: "Wellness", short: "Wellness", icon: Leaf },
+    { id: "assessment", label: "Assessment", short: "Assessment", icon: Activity },
     { id: "ai", label: "AI Companion", short: "AI", icon: MessageCircle },
     { id: "history", label: "History", short: "History", icon: BarChart3 },
     { id: "profile", label: "Profile", short: "Profile", icon: User },
   ];
-  const titles = { dashboard: "Dashboard", wellness: "Wellness", ai: "AI Companion", history: "History", profile: "Profile", sos: "Emergency Support" };
+  const titles = {
+    dashboard: "Dashboard",
+    wellness: "Wellness Check-in",
+    assessment: "ML Stress Assessment",
+    ai: "AI Companion",
+    history: "History & Trends",
+    profile: "Profile",
+    sos: "Emergency Support",
+  };
 
   let body;
   if (screen === "landing") body = <Landing go={go} />;
@@ -1861,6 +2174,15 @@ export default function MindMate() {
             <ErrorBoundary inline>
               {tab === "dashboard" && <Dashboard user={user} today={today} score={score} setTab={navigateTo} setWtab={setWtab} openSession={setSession} />}
               {tab === "wellness" && <Wellness key={String(today.done)} today={today} setToday={setToday} wtab={wtab} setWtab={setWtab} openSession={setSession} setTab={navigateTo} resultShown={resultShown} setResultShown={setResultShown} />}
+              {tab === "assessment" && (
+                <Assessment
+                  onComplete={(res) => {
+                    toast(`Assessment complete: ${res.predicted_class} stress predicted.`);
+                  }}
+                  onViewHistory={() => navigateTo("history")}
+                  onTalkToAi={() => navigateTo("ai")}
+                />
+              )}
               {tab === "ai" && (
                 <>
                   <h1 className="h1">AI Companion</h1>
@@ -1868,7 +2190,7 @@ export default function MindMate() {
                   <Chat ctx={{ level: levelOf(score), score: score, sleep: today.sleep, study: today.study, screen: today.screen, exam: today.exam }} />
                 </>
               )}
-              {tab === "history" && <History today={today} score={score} />}
+              {tab === "history" && <History today={today} score={score} onNavigate={navigateTo} />}
               {tab === "sos" && <Sos contacts={contacts} setContacts={setContacts} autoNotify={autoNotify} setAutoNotify={setAutoNotify} toast={toast} />}
               {tab === "profile" && <Profile user={user} setUser={setUser} contacts={contacts} setTab={navigateTo} onLogout={logout} prefs={prefs} setPrefs={setPrefs} toast={toast} />}
             </ErrorBoundary>

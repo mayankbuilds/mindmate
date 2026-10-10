@@ -40,8 +40,8 @@ export default function StressCard({ score, mlPrediction, riskBreakdown, compact
   return (
     <div className="card" style={{ textAlign: 'center' }}>
       <div className="row" style={{ marginBottom: 8 }}>
-        <h3 style={{ textAlign: 'left' }}>Stress Assessment</h3>
-        <span className="ml-badge"><Cpu size={13} /> ML Powered</span>
+        <h3 style={{ textAlign: 'left' }}>Lifestyle Balance Index</h3>
+        <span className="chip" style={{ fontSize: 12, padding: '2px 8px' }}>Rule-based Heuristic</span>
       </div>
       <StressRing score={score} size={compact ? 170 : 190} />
       <div className="states">
